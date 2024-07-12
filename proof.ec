@@ -18,6 +18,7 @@ op m_decode : matrix -> plaintext.
 axiom m_encode_rows m : rows (m_encode m) = mb.
 axiom m_encode_cols m : cols (m_encode m) = nb.
 
+hint exact: m_encode_rows m_encode_cols.
 
 op c_encode : raw_ciphertext -> ciphertext.
 op c_decode : ciphertext -> raw_ciphertext.
@@ -72,7 +73,7 @@ op enc(rr : randomness, pk : pkey, m : plaintext) : ciphertext =
 
 op dec(sk : skey, c : ciphertext) : plaintext option =
     let (c1,c2) = c_decode c in
-       Some (m_decode (c2 + -(c1 * trmx (sk_decode sk)))).
+       Some (m_decode (c2 + -(c1 * sk_decode sk))).
 
 (******************************************************************)
 (*    The Security Games                                          *)
@@ -129,7 +130,7 @@ module LWE_PKE_HASH_PROC : Scheme = {
   proc dec(sk : skey, c : ciphertext) : plaintext option = {
     var c1,c2;
     (c1,c2) <- c_decode c;
-    return (Some (m_decode (c2 + -(c1 * trmx (sk_decode sk)))));
+    return (Some (m_decode (c2 + -(c1 * sk_decode sk))));
   }
 }.
 
@@ -195,6 +196,31 @@ module (D_ENC(A : Adversary) : PRG_ENC.Distinguisher) = {
        LWE_PKE_HASH_PRG.e' <- e';
        LWE_PKE_HASH_PRG.e'' <- e'';
        b <@ CPA(LWE_PKE_HASH_PRG,A).main();
+       return b;
+   }      
+}.
+
+module (DC_KG(A : CORR_ADV) : PRG_KG.Distinguisher)  = {
+   proc distinguish(sd : seed, s : matrix, e : matrix) : bool = {
+       var coins,b;
+       LWE_PKE_HASH_PRG.sd <- sd;
+       LWE_PKE_HASH_PRG.s <- s;
+       LWE_PKE_HASH_PRG.e <- e;
+       coins <$ drand;
+       (LWE_PKE_HASH_PRG.s',LWE_PKE_HASH_PRG.e',LWE_PKE_HASH_PRG.e'') <- prg_enc coins;
+       b <@ Correctness_Adv(LWE_PKE_HASH_PRG,A).main();
+       return b;
+   }      
+}.
+
+module (DC_ENC(A : CORR_ADV) : PRG_ENC.Distinguisher) = {
+   proc distinguish(s' : matrix, e' : matrix, e'' : matrix) : bool = {
+       var b;
+       (LWE_PKE_HASH_PRG.sd,LWE_PKE_HASH_PRG.s,LWE_PKE_HASH_PRG.e) <$ prg_kg_ideal;
+       LWE_PKE_HASH_PRG.s' <- s';
+       LWE_PKE_HASH_PRG.e' <- e';
+       LWE_PKE_HASH_PRG.e'' <- e'';
+       b <@ Correctness_Adv(LWE_PKE_HASH_PRG,A).main();
        return b;
    }      
 }.
@@ -458,6 +484,87 @@ rewrite (hop2_right A &m).
 rewrite (game2_equiv &m).
 rewrite (game2_prob &m _ _) //.
 by smt().
+qed.
+
+end section.
+
+(* matrix dimension ? *)
+op noise_exp (_A s s' e e' e'': matrix) m = 
+    let b = _A * s + e in
+    let b' = s' * _A + e' in
+    let v = s' * b + e'' in
+    let (c1, c2) = c_decode (c_encode (b',v + m_encode m)) in
+        c2 - c1 * s - m_encode m.
+
+op max_noise : int.
+op under_noise_bound : matrix -> int -> bool.
+
+axiom good_c_decode c: c_decode (c_encode c) = c.
+axiom good_m_decode m n :
+  under_noise_bound n max_noise =>
+  m_decode (m_encode m + n) = m.
+
+module CorrectnessAdvNoise(A : CORR_ADV) = {
+  proc main() = {
+    var sd,s,s',e, e', e'', t, _A, m, nu, pk, sk;
+    sd <$ dseed;
+    s  <$ Chi_matrix n nb;
+    s'  <$ Chi_matrix mb n;
+    e  <$ Chi_matrix n nb;
+    e'  <$ Chi_matrix mb n;
+    e''  <$ Chi_matrix mb nb;
+    _A <- H sd n n;
+    t  <- _A * s + e;
+
+    (pk, sk) <- (pk_encode (sd,t), sk_encode s);
+    m <@ A.find(pk, sk);
+    nu <- noise_exp _A s s' e e' e'' m;
+
+    return (!under_noise_bound nu max_noise);
+  }
+}.
+
+(* correctness *)
+section.
+declare module A <: CORR_ADV  {-LWE_PKE_HASH_PRG}.
+
+lemma correctness_noise &m:
+  Pr[ Correctness_Adv(LWE_PKE_HASH_PROC,A).main() @ &m : res]  <= 
+  Pr[ CorrectnessAdvNoise(A).main() @ &m : res].
+proof.
+byequiv => //.
+proc. inline *.
+swap {1} 10 -7; swap {1} [11..12] -6. 
+seq 9 10: (
+  ={sd, s, s', e, e', e'', m} /\
+  pk_decode pk{1} = (sd{1}, t{1}) /\
+  sk_decode sk{1} = s{1} /\
+  t{1} = H sd{1} n n * s{1} + e{1} /\
+  _A{2} = H sd{2} n n /\
+  s'{1} \in Chi_matrix mb n /\
+  e'{1} \in Chi_matrix mb n /\
+  e''{1} \in Chi_matrix mb nb
+).
++ call (_:true); auto => />. move => * />; split.
+    + by apply /pk_encodeK.
+    + by apply /sk_encodeK.
+
+auto => />.
+move => &1 &2 -> hs' he' he''.
+rewrite /noise_exp /= !good_c_decode /= ![_+m_encode _]addmC. (*why so slow ? *)
+rewrite -addmA.
+pose x := _ * (H _ n n * sk_decode _ + _) + _ - _.
+
+apply Logic.contra. 
+rewrite [_+x-_]addmC addmA addNm m_encode_rows m_encode_cols. (* why can't simplify *)
+have :zerom mb nb + x = x; last by move => ->; apply good_m_decode.
+
+rewrite /x.
+apply lin_add0m.
++ rewrite !rows_addm !rows_neg !rows_mulmx rows_addm rows_mulmx.
++admit.
+
+
 qed.
 
 end section.
