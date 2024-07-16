@@ -1,5 +1,6 @@
 require import AllCore Distr List SmtMap Dexcepted PKE_ROM StdOrder.
 require (**RndExcept **) LWE FLPRG.
+(*****) import IntOrder.
 
 theory LWE_PKE_Hash.
 
@@ -19,6 +20,7 @@ axiom m_encode_rows m : rows (m_encode m) = mb.
 axiom m_encode_cols m : cols (m_encode m) = nb.
 
 hint exact: m_encode_rows m_encode_cols.
+hint simplify (m_encode_rows, m_encode_cols).
 
 op c_encode : raw_ciphertext -> ciphertext.
 op c_decode : ciphertext -> raw_ciphertext.
@@ -488,13 +490,60 @@ qed.
 
 end section.
 
-(* matrix dimension ? *)
+lemma eq_tuple_imply_fst (x z: 'a) (y w: 'b): (x, y) = (z, w) => (x, y).`1 = (z, w).`1.
+proof. done. qed.
+
+lemma eq_tuple_imply_snd (x z: 'a) (y w: 'b): (x, y) = (z, w) => (x, y).`2 = (z, w).`2.
+proof. done. qed.
+
+
+lemma dmatrix_rows m d r c: 0 < r => 0 < c => m \in dmatrix d r c => rows m = r. 
+proof.
+    move => *.
+    rewrite -(fst_pair (rows m) (cols m)) -(fst_pair r c).
+    apply /eq_tuple_imply_fst/(size_dmatrix d r c) => //;
+    by apply ltrW.
+qed.
+
+lemma dmatrix_cols m d r c: 0 < r => 0 < c => m \in dmatrix d r c => cols m = c. 
+proof.
+    move => *.
+    rewrite -(snd_pair (rows m) (cols m)) -(snd_pair r c).
+    apply /eq_tuple_imply_snd/(size_dmatrix d r c) => //;
+    by apply ltrW.
+qed.
+
+lemma chi_matrix_rows m r c: 0 < r => 0 < c => m \in Chi_matrix r c => rows m = r.
+proof.
+    rewrite /Chi_matrix => *; by apply (dmatrix_rows m Chi r c).
+qed.
+
+lemma chi_matrix_cols m r c: 0 < r => 0 < c => m \in Chi_matrix r c => cols m = c.
+proof.
+    rewrite /Chi_matrix => *; by apply (dmatrix_cols m Chi r c).
+qed.
+
+lemma chi_matrix_mb_n_rows m: m \in Chi_matrix mb n => rows m = mb.
+proof. by apply /chi_matrix_rows. qed. 
+
+lemma chi_matrix_mb_nb_rows m: m \in Chi_matrix mb nb => rows m = mb.
+proof. by apply /chi_matrix_rows. qed. 
+
+lemma chi_matrix_mb_nb_cols m: m \in Chi_matrix mb nb => cols m = nb.
+proof. by apply /chi_matrix_cols. qed. 
+
+lemma chi_matrix_n_nb_cols m: m \in Chi_matrix n nb => cols m = nb.
+proof. by apply /chi_matrix_cols. qed. 
+
+(* NOTE:matrix dimension ? *)
 op noise_exp (_A s s' e e' e'': matrix) m = 
     let b = _A * s + e in
     let b' = s' * _A + e' in
     let v = s' * b + e'' in
     let (c1, c2) = c_decode (c_encode (b',v + m_encode m)) in
         c2 - c1 * s - m_encode m.
+
+op noise_exp_val (s s' e e' e'': matrix) = s' * e + e'' - e'* s.
 
 op max_noise : int.
 op under_noise_bound : matrix -> int -> bool.
@@ -503,6 +552,10 @@ axiom good_c_decode c: c_decode (c_encode c) = c.
 axiom good_m_decode m n :
   under_noise_bound n max_noise =>
   m_decode (m_encode m + n) = m.
+
+axiom sk_decode_cols sk: cols (sk_decode sk) = nb.
+
+hint simplify (sk_decode_cols, good_c_decode).
 
 module CorrectnessAdvNoise(A : CORR_ADV) = {
   proc main() = {
@@ -520,13 +573,62 @@ module CorrectnessAdvNoise(A : CORR_ADV) = {
     m <@ A.find(pk, sk);
     nu <- noise_exp _A s s' e e' e'' m;
 
-    return (!under_noise_bound nu max_noise);
+    return !under_noise_bound nu max_noise;
   }
 }.
+
+module CorrectnessBound = {
+  proc main() = {
+    var s, s', e, e', e'', nu;
+    s  <$ Chi_matrix n nb;
+    s'  <$ Chi_matrix mb n;
+    e  <$ Chi_matrix n nb;
+    e'  <$ Chi_matrix mb n;
+    e''  <$ Chi_matrix mb nb;
+    nu <- noise_exp_val s s' e e' e'';
+    return !under_noise_bound nu max_noise;
+  }
+}.
+
 
 (* correctness *)
 section.
 declare module A <: CORR_ADV  {-LWE_PKE_HASH_PRG}.
+
+lemma corr_proc &m :
+    Pr[Correctness_Adv(LWE_PKE_HASH, A).main() @ &m: res] -
+    Pr[Correctness_Adv(LWE_PKE_HASH_PROC, A).main() @ &m: res] = 
+    Pr[PRG_KG.IND(PRG_KG.PRGr,DC_KG(A)).main() @ &m: res] -
+      Pr[PRG_KG.IND(PRG_KG.PRGi,DC_KG(A)).main() @ &m: res] +
+    Pr[PRG_ENC.IND(PRG_ENC.PRGr,DC_ENC(A)).main() @ &m: res] -
+      Pr[PRG_ENC.IND(PRG_ENC.PRGi, DC_ENC(A)).main() @ &m: res].
+proof.
+have -> : Pr[Correctness_Adv(LWE_PKE_HASH, A).main() @ &m: res] =
+  Pr[PRG_KG.IND(PRG_KG.PRGr, DC_KG(A)).main() @ &m: res].
++ byequiv => //.
+  proc; inline *.
+  swap {1} 7 -5.
+  wp; call (:true).
+  by auto => /#.
+have ->: Pr[PRG_KG.IND(PRG_KG.PRGi,DC_KG(A)).main() @ &m: res] =
+  Pr[PRG_ENC.IND(PRG_ENC.PRGr,DC_ENC(A)).main() @ &m: res].
++ byequiv => //.
+  proc; inline *.
+  wp. swap {2} 6 -5.
+  call(:true).
+  by auto.
+have ->: Pr[Correctness_Adv(LWE_PKE_HASH_PROC, A).main() @ &m: res] = 
+  Pr[PRG_ENC.IND(PRG_ENC.PRGi, DC_ENC(A)).main() @ &m: res].
++ byequiv => //.
+  proc; inline *.
+  swap {2} 6 -3. swap {2} [10..15] -6.
+  wp. rndsem {1} 9. rnd. wp.
+  call (: true).
+  wp. rndsem {1} 0. rnd.
+  by auto.
+  
+by ring.
+qed.
 
 lemma correctness_noise &m:
   Pr[ Correctness_Adv(LWE_PKE_HASH_PROC,A).main() @ &m : res]  <= 
@@ -543,28 +645,86 @@ seq 9 10: (
   _A{2} = H sd{2} n n /\
   s'{1} \in Chi_matrix mb n /\
   e'{1} \in Chi_matrix mb n /\
-  e''{1} \in Chi_matrix mb nb
+  e''{1} \in Chi_matrix mb nb /\
+  e{1} \in Chi_matrix n nb
 ).
-+ call (_:true); auto => />. move => * />; split.
-    + by apply /pk_encodeK.
-    + by apply /sk_encodeK.
++ call (_:true); auto => />. move => * />; split;
+  [by apply /pk_encodeK|by apply /sk_encodeK].
 
 auto => />.
-move => &1 &2 -> hs' he' he''.
-rewrite /noise_exp /= !good_c_decode /= ![_+m_encode _]addmC. (*why so slow ? *)
-rewrite -addmA.
+move => &1 &2 ->.
+move => /chi_matrix_mb_n_rows hrs';
+move => /chi_matrix_mb_n_rows hre';
+move => ^ /chi_matrix_mb_nb_rows hre'' /chi_matrix_mb_nb_cols hce'';
+move => /chi_matrix_n_nb_cols hce.
+rewrite /noise_exp /= [_+m_encode _]addmC -addmA. (* NOTE: ! why so slow ? *)
 pose x := _ * (H _ n n * sk_decode _ + _) + _ - _.
 
-apply Logic.contra. 
-rewrite [_+x-_]addmC addmA addNm m_encode_rows m_encode_cols. (* why can't simplify *)
-have :zerom mb nb + x = x; last by move => ->; apply good_m_decode.
+apply Logic.contra; 
+rewrite [_+x-_]addmC addmA addNm m_encode_rows m_encode_cols.
 
-rewrite /x.
-apply lin_add0m.
-+ rewrite !rows_addm !rows_neg !rows_mulmx rows_addm rows_mulmx.
-+admit.
+have -> :zerom mb nb + x = x.
++ rewrite /x mulmxDr mulmxDl oppmD.
+  apply lin_add0m;
+  rewrite ?rows_addm ?rows_neg ?rows_mulmx ?cols_addm ?cols_neg ?cols_mulmx;
+  rewrite /#.
+by apply good_m_decode.
+qed.
 
+lemma matrix_cacnel (x y z: matrix): x = y => x + z = y + z.
+proof. done. qed.
 
+lemma correctness_bound &m:
+  islossless A.find =>
+  Pr[ CorrectnessAdvNoise(A).main() @ &m : res] =
+  Pr[ CorrectnessBound.main() @ &m : res].
+proof.
+move => *.
+byequiv => //.
+proc; inline *.
+wp. call{1}(:true ==> true). wp. do 5! rnd. rnd{1}.
+auto => // />.
+move => sd ?;
+move => s /chi_matrix_n_nb_cols hcs;
+move => s' /chi_matrix_mb_n_rows hrs';
+move => e /chi_matrix_n_nb_cols hce;
+move => e' /chi_matrix_mb_n_rows hre';
+move => e'' ^ /chi_matrix_mb_nb_rows hre'' /chi_matrix_mb_nb_cols hce'' m.
+apply /congr1; congr.
+rewrite /noise_exp/noise_exp_val //=.
+rewrite -[(_ - _ - _)%Matrices]addmA -oppmD mulmxDl mulmxDr.
+rewrite sub_eqm /= ?rows_addm ?rows_neg ?rows_mulmx ?cols_addm ?cols_neg ?cols_mulmx;
+1..2: rewrite /#.
+
+rewrite addmA.
+apply matrix_cacnel.
+rewrite mulmxA.
+pose x := s' * _ * s. rewrite -[x + _ + _]addmA.
+pose y := s' * e + e''.
+pose z := e' * s.
+rewrite [y-z+_]addmC [_+(y-z)]addmA -[x+z+y]addmA [z+y]addmC;
+rewrite -addmA -addmA addmN;
+rewrite [_+(y+_)]addmA eq_sym.
+apply lin_addm0;
+rewrite /x /y /z;
+rewrite ?rows_addm ?rows_mulmx ?cols_addm ?cols_mulmx; rewrite /#.
+qed.
+
+lemma correctness_theorem &m :
+  islossless A.find =>
+  Pr[Correctness_Adv(LWE_PKE_HASH, A).main() @ &m: res] <=
+  Pr[CorrectnessBound.main() @ &m : res] +
+  (Pr[PRG_KG.IND(PRG_KG.PRGr,DC_KG(A)).main() @ &m: res] -
+    Pr[PRG_KG.IND(PRG_KG.PRGi,DC_KG(A)).main() @ &m: res] +
+  Pr[PRG_ENC.IND(PRG_ENC.PRGr,DC_ENC(A)).main() @ &m: res] -
+    Pr[PRG_ENC.IND(PRG_ENC.PRGi, DC_ENC(A)).main() @ &m: res]).
+proof.
+move => *.
+rewrite -correctness_bound // -corr_proc.
+pose x := Pr[Correctness_Adv(LWE_PKE_HASH, A).main() @ &m : res].
+rewrite RField.addrA [(_+x)%Real]RField.addrC -RField.addrA.
+rewrite RealOrder.ler_addl RealOrder.subr_ge0.
+exact correctness_noise.
 qed.
 
 end section.

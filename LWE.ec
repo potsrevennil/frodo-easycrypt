@@ -44,6 +44,8 @@ op n : { int | 0 < n } as gt0_n.
 op nb : { int | 0 < nb } as gt0_nb.
 op mb : { int | 0 < mb } as gt0_mb.
 
+hint exact: gt0_n gt0_nb gt0_mb.
+
 (* --------------------------------------------------------------------------- *)
 (* Uniform distribution over R *)
 op [lossless uniform full] duni_R : R distr.
