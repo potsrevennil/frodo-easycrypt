@@ -702,8 +702,11 @@ rewrite mulmxA.
 pose x := s' * _ * s. rewrite -[x + _ + _]addmA.
 pose y := s' * e + e''.
 pose z := e' * s.
-rewrite [y-z+_]addmC [_+(y-z)]addmA -[x+z+y]addmA [z+y]addmC;
-rewrite -addmA -addmA addmN;
+rewrite [y-z+_]addmC.
+rewrite [_+(y-z)]addmA.
+rewrite -[x+z+y]addmA.
+rewrite [z+y]addmC.
+rewrite -addmA -addmA addmN.
 rewrite [_+(y+_)]addmA eq_sym.
 apply lin_addm0;
 rewrite /x /y /z;
