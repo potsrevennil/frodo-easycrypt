@@ -1,9 +1,8 @@
-require import AllCore Distr List.
+require import AllCore Distr List StdOrder.
 require (****) DynMatrix.
+(****) import IntOrder.
 
 clone import DynMatrix as Matrix.
-
-print DynMatrix.
 
 instance ring with R
   op rzero = ZR.zeror
@@ -32,7 +31,7 @@ instance ring with R
 
 op "_.[_<-_]" (m: matrix) (ij: int*int) (v: R): matrix =
    offunm (fun i j => if (i,j) = ij then v else m.[ij],rows m, cols m).
-(*      
+(*
 op tolist (m: matrix): R list =
   let ys = range 0 (cols m) in
   let xs = range 0 (rows m) in
@@ -46,42 +45,61 @@ op mb : { int | 0 < mb } as gt0_mb.
 
 hint exact: gt0_n gt0_nb gt0_mb.
 
+lemma ge0_n: 0 <= n.
+proof. by apply ltrW. qed.
+
+lemma ge0_mb: 0 <= mb.
+proof. by apply ltrW. qed.
+
+lemma ge0_nb: 0 <= nb.
+proof. by apply ltrW. qed.
+
+hint exact: ge0_n ge0_nb ge0_mb.
+
 (* --------------------------------------------------------------------------- *)
 (* Uniform distribution over R *)
 op [lossless uniform full] duni_R : R distr.
+hint exact: duni_R_ll duni_R_uni duni_R_fu.
+hint simplify (duni_R_ll, duni_R_uni, duni_R_fu).
 
 lemma duni_R_funi : is_funiform duni_R.
-proof. apply is_full_funiform; [apply duni_R_fu | apply duni_R_uni]. qed.
+proof. by apply is_full_funiform. qed.
 
 (* --------------------------------------------------------------------------- *)
 (* Distribution over R (short values) *)
 
 op [lossless] Chi  : R distr.
+hint exact: Chi_ll.
+hint simplify Chi_ll.
 
 (* --------------------------------------------------------------------------- *)
-(* Extention distribution to matrix *) 
+(* Extension distribution to matrix *)
 
 op duni_matrix = dmatrix duni_R.
 
+hint exact: dmatrix_ll dmatrix_uni dvector_ll.
+hint simplify (dmatrix_ll, dmatrix_uni, dvector_ll).
+
 lemma duni_matrix_ll m n : is_lossless (duni_matrix m n).
-proof. apply/dmatrix_ll/duni_R_ll. qed.
+proof. by trivial. qed.
 
 
-
-lemma duni_matrix_fu m n A_: 
+lemma duni_matrix_fu m n A_:
      0 <= m => 0 <= n =>  A_ \in (duni_matrix m n) <=> size A_ = (m, n).
-proof. 
+proof.
 move => ge0m ge0n.
-by apply /supp_dmatrix_full /duni_R_fu => //.
+by apply /supp_dmatrix_full.
 qed.
 
 lemma duni_matrix_uni m n : is_uniform (duni_matrix m n).
-proof. apply /dmatrix_uni/duni_R_uni. qed.
+proof. by trivial. qed.
 
 op Chi_matrix = dmatrix Chi.
 
 lemma Chi_matrix_ll m n : is_lossless (Chi_matrix m n).
-proof. apply/dmatrix_ll /Chi_ll. qed.
+proof. by trivial. qed.
+
+hint simplify (duni_matrix_uni, duni_matrix_ll, Chi_matrix_ll).
 
 module type Adv_T = {
    proc guess(A : matrix, uvw : matrix * matrix * matrix) : bool
@@ -91,7 +109,7 @@ module LWE(Adv : Adv_T) = {
 
   proc main(b : bool) : bool = {
     var b', _A, s, e, u0, u1, s', e', v0, v1, _B, e'', w0, w1;
-    
+
     _A <$ duni_matrix n n;
     s <$ Chi_matrix n nb;
     e <$ Chi_matrix n nb;
@@ -107,7 +125,7 @@ module LWE(Adv : Adv_T) = {
     e'' <$ Chi_matrix mb nb;
     w0 <- s' * _B + e'';
     w1 <$ duni_matrix mb nb;
-    
+
     b' <@ Adv.guess(_A, if b then (u1,v1,w1) else (u0,v0,w0));
     return b';
    }
@@ -115,7 +133,7 @@ module LWE(Adv : Adv_T) = {
 }.
 
 (* --------------------------------------------------------------------------- *)
-(* Version of LWE using a concrete hash function to derive the matrix         *)
+(* Version of LWE using a concrete hash function to derive the matrix          *)
 (* --------------------------------------------------------------------------- *)
 type seed.
 op H : seed -> int -> int -> matrix.
@@ -123,15 +141,23 @@ op H : seed -> int -> int -> matrix.
 (* --------------------------------------------------------------------------- *)
 op [lossless] dseed : seed distr.
 
-module type HAdv1_T = {
+(* --------------------------------------------------------------------------- *)
+(* LWE adversaries                                                             *)
+(* --------------------------------------------------------------------------- *)
+module type HAdv1_M = {
    proc guess(sd : seed, u : matrix) : bool
 }.
 
-module LWE_H1(Adv : HAdv1_T) = {
+module type HAdv1_V = {
+   proc guess(sd : seed, u : vector) : bool
+}.
+
+(* LWE adversary *)
+module LWE_H1(Adv : HAdv1_M) = {
 
   proc main(b : bool) : bool = {
     var seed, b', _A, s, e, u0, u1;
-    
+
     seed <$ dseed;
     _A <- H seed n n;
     s <$ Chi_matrix n nb;
@@ -153,7 +179,7 @@ module LWE_H2(Adv : HAdv2_T) = {
 
   proc main(b : bool) : bool = {
     var seed, b', _A, s', e', u0, u1, _B, e'', v0, v1;
-    
+
     seed <$ dseed;
     _B <$ duni_matrix n nb;
     s' <$ Chi_matrix mb n;
@@ -166,7 +192,7 @@ module LWE_H2(Adv : HAdv2_T) = {
 
     v0 <- s' * _B + e'';
     v1 <$ duni_matrix mb nb;
-    
+
     b' <@ Adv.guess(seed, _B, if b then (u1, v1) else (u0, v0));
     return b';
    }
