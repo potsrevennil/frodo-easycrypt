@@ -330,6 +330,14 @@ clone PROM.FullRO as LWE_V1_L with
     dmap (dvector Chi n) (fun (e: vector) => H sd n n *^ s + e))
   proof *.
 
+clone PROM.FullRO as LWE_V1_R with
+  type in_t <- seed,
+  type out_t <- vector,
+  type d_in_t <- unit,
+  type d_out_t <- bool,
+  op dout <- fun _ => dvector duni_R n
+  proof *.
+
 (* mock hybrid Ob oracle *)
 module ObFake = {
   var sd: seed
@@ -375,6 +383,24 @@ module HAdv1_C(A : HAdv1_M) = {
 
 (* auxiliary game for linking vector adversary with hybrid mock and LWE Hybrid Game adversary utilizing PROM *)
 module LWE_V1_AuxL (A: HAdv1_M) (O: LWE_V1_L.RO) = {
+  module OFake = {
+    proc orcl(): vector = {
+      var v;
+      v <@ O.get(ObFake.sd);
+      return v;
+    }
+  }
+
+  proc distinguish(): bool = {
+    var b;
+    ObFake.sd <$ dseed;
+    O.sample(ObFake.sd);
+    b <@ HybGame(B(A), ObFake, OFake).main();
+    return b;
+  }
+}.
+
+module LWE_V1_AuxR (A: HAdv1_M) (O: LWE_V1_R.RO) = {
   module OFake = {
     proc orcl(): vector = {
       var v;
@@ -462,6 +488,71 @@ proof.
 rewrite (LWE_V1_L_Aux1 A _) -(LWE_V1_L_Aux2 A _).
 byequiv (LWE_V1_L.FullEager.RO_LRO (LWE_V1_AuxL(A)) _) => // *.
 by rewrite dlet_ll // => *; rewrite dmap_ll.
+qed.
+
+lemma LWE_V1_R_Aux1 (A <: HAdv1_M{-LWE_V1_R.RO, -HAdv1_C}) &m:
+    Pr[LWE_V1(HAdv1_C(A)).main(true) @ &m: res] = Pr[LWE_V1_R.MainD(LWE_V1_AuxR(A), LWE_V1_R.RO).distinguish() @ &m: res].
+proof.
+byequiv => //.
+proc; inline *; wp.
+call (:true).
+wp.
+while (={i, cs, HybOrcl.l0, HybOrcl.l, ObFake.sd} /\ HAdv1_C.v{1} = r1{2} /\ LWE_V1_R.RO.m{2}.[ObFake.sd{2}] = Some r1{2}).
++ sp.
+  + if => //=.
+    by auto.
+  + if => //=.
+    by auto => //= /> /#.
+  + by auto.
++ wp. rnd. wp. rnd. wp. rnd{1}. rnd{1}. wp. rnd. auto => //= /> *.
+  by rewrite /dom emptyE //= get_set_sameE.
+qed.
+
+lemma LWE_V1_R_Aux2 (A <: HAdv1_M{-HAdv1_C, -LWE_H1_Ob, -LWE_V1_R.RO}) &m:
+    Pr[LWE_V1_R.MainD(LWE_V1_AuxR(A), LWE_V1_R.LRO).distinguish() @ &m: res] = Pr[HybGame(B(A), LWE_H1_Ob, R(LWE_H1_Ob)).main() @ &m: res].
+proof.
+byequiv => //.
+proc; inline *; wp.
+call (:true); wp.
+while (={i, HybOrcl.l0, HybOrcl.l, cs} /\
+  ObFake.sd{1} = LWE_H1_Ob.sd{2} /\
+  LWE_H1_Ob._A{2} = H LWE_H1_Ob.sd{2} n n /\
+  LWE_V1_R.RO.m{1}.[ObFake.sd{1}] = (HybOrcl.l0{1} < HybOrcl.l{1}) ? Some v{1} : None
+).
++ sp.
+  + if => //=.
+    by auto => /#.
+  + if => //=.
+    auto => //= /> *.
+    rewrite get_set_sameE => //= /#.
+  + by auto => /#. 
++ swap {2} [1..2] 2.
+  auto => //= /> ? ? ? ?.
+    by rewrite DInterval.supp_dinter emptyE => /#.
+qed.
+
+lemma LWE_V1_R (A <: HAdv1_M{-HAdv1_C, -LWE_H1_Ob, -LWE_V1_R.RO, -LWE_V1_R.FRO}) &m:
+      Pr[LWE_V1(HAdv1_C(A)).main(true) @ &m: res] = Pr[HybGame(B(A),LWE_H1_Ob,R(LWE_H1_Ob)).main() @ &m: res].
+proof.
+rewrite (LWE_V1_R_Aux1 A _) -(LWE_V1_R_Aux2 A _).
+byequiv (LWE_V1_R.FullEager.RO_LRO (LWE_V1_AuxR(A)) _) => // *.
+qed.
+
+(* bound by nb * (LWE_0 and LWE_1) *)
+lemma LWE_H1_Hybrid (A <: HAdv1_M) &m :
+    Pr[LWE_M1(A).main(false) @ &m : res] - Pr[LWE_M1(A).main(true) @ &m : res]
+  = nb%r * (Pr[LWE_V1(HAdv1_C(A)).main(false) @ &m : res] - Pr[LWE_V1(HAdv1_C(A)).main(true) @ &m : res]).
+proof.
+admit.
+qed.
+
+lemma LWE_H1_Hybrid_restr &m (Adv <: HAdv1_M) :
+    Pr[Ln(LWE_H1_Ob, B(Adv)).main() @ &m: res]
+  - Pr[Rn(LWE_H1_Ob, B(Adv)).main() @ &m: res]
+  = nb%r * (Pr[HybGame(B(Adv),LWE_H1_Ob,L(LWE_H1_Ob)).main() @ &m: res]
+          - Pr[HybGame(B(Adv),LWE_H1_Ob,R(LWE_H1_Ob)).main() @ &m: res]).
+proof.
+admit.
 qed.
 
 module type HAdv2_T = {
