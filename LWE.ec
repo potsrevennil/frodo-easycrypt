@@ -41,24 +41,6 @@ op tolist (m: matrix): R list =
   map (fun i => m.[i] ) ms.
 *)
 
-op n : { int | 0 < n } as gt0_n.
-op nb : { int | 0 < nb } as gt0_nb.
-op mb : { int | 0 < mb } as gt0_mb.
-
-hint exact: gt0_n gt0_nb gt0_mb.
-
-lemma ge0_n: 0 <= n.
-proof. by apply ltrW. qed.
-
-lemma ge0_mb: 0 <= mb.
-proof. by apply ltrW. qed.
-
-lemma ge0_nb: 0 <= nb.
-proof. by apply ltrW. qed.
-
-hint exact: ge0_n ge0_nb ge0_mb.
-hint simplify (ge0_n,ge0_nb,ge0_mb).
-
 (* --------------------------------------------------------------------------- *)
 (* Uniform distribution over R *)
 op [lossless uniform full] duni_R : R distr.
@@ -104,6 +86,469 @@ proof. by trivial. qed.
 
 hint simplify (duni_matrix_uni, duni_matrix_ll, Chi_matrix_ll).
 
+(* --------------------------------------------------------------------------- *)
+(* Version of LWE using a concrete hash function to derive the matrix          *)
+(* --------------------------------------------------------------------------- *)
+type seed.
+
+(* --------------------------------------------------------------------------- *)
+op [lossless] dseed : seed distr.
+
+module type Adv_M0 = {
+   proc guess(sd: seed, m : matrix) : bool
+}.
+
+module type Adv_M = {
+   proc guess(sd: seed, _B: matrix, m : matrix) : bool
+}.
+
+module type Adv_V = {
+   proc guess(sd: seed, _B: matrix, v : vector) : bool
+}.
+
+theory LWE_Hybrid.
+
+op G : seed -> int -> int -> matrix.
+
+op k : { int | 0 <= k } as ge0_k.
+op l : { int | 0 < l } as gt0_l.
+op m: { int | 0 < m } as gt0_m.
+op n : { int | 0 < n } as gt0_n.
+
+hint exact: gt0_m gt0_n gt0_l ge0_k.
+hint simplify (gt0_m, gt0_n, gt0_l, ge0_k).
+
+module LWE_M(Adv: Adv_M) = {
+  var sd: seed
+
+  proc main(b : bool) : bool = {
+    var b', s, e, u0, u1, _A, _B;
+
+    sd <$ dseed;
+    _A <- G sd m n;
+    _B <$ duni_matrix m k;
+
+    s <$ Chi_matrix l m;
+    e <$ Chi_matrix l (n + k);
+    u0 <- s * (_A || _B) + e;
+    u1 <$ duni_matrix l (n + k);
+
+    b' <@ Adv.guess(sd, _B, if b then u1 else u0);
+    return b';
+   }
+}.
+
+(* LWE Matrix adversary *)
+module LWE_M_Loop(Adv: Adv_M) = {
+  var sd: seed
+
+  proc main(b : bool) : bool = {
+    var b', i, sc, ec, u0, u1, u0c, u1c, u0cs, u1cs, _A, _B;
+
+    sd <$ dseed;
+    _A <- G sd m n;
+    _B <$ duni_matrix m k;
+
+    u0cs <- [];
+    u1cs <- [];
+    i <- 0;
+
+    while (i < l) {
+        sc <$ dvector Chi m;
+        ec <$ dvector Chi (n + k);
+        u0c <- sc ^* (_A || _B) + ec;
+        u1c <$ dvector duni_R (n + k);
+
+        u0cs <- rcons u0cs u0c;
+        u1cs <- rcons u1cs u1c;
+
+        i <- i + 1;
+    }
+
+    u0 <- trmx (ofcols (n + k) l u0cs);
+    u1 <- trmx (ofcols (n + k) l u1cs);
+
+    b' <@ Adv.guess(sd, _B, if b then u1 else u0);
+    return b';
+   }
+}.
+
+(* LWE Vector adversary *)
+module LWE_V(Adv: Adv_V) = {
+  var sd: seed
+
+  proc main(b: bool) : bool = {
+    var b', sc, ec, u0, u1, _A, _B;
+
+    sd <$ dseed;
+    _A <- G sd m n;
+    _B <$ duni_matrix m k;
+
+    sc <$ dvector Chi m;
+    ec <$ dvector Chi (n + k);
+    u0 <- sc ^* (_A || _B) + ec;
+    u1 <$ dvector duni_R (n + k);
+
+    b' <@ Adv.guess(sd, _B, if b then u1 else u0);
+    return b';
+   }
+}.
+
+lemma LWE_M_Eq (A <: Adv_M) b &m:
+    Pr[LWE_M(A).main(b) @ &m: res] = Pr[LWE_M_Loop(A).main(b) @ &m: res].
+proof.
+admit.
+qed.
+
+(* --------------------------------------------------------------------------- *)
+(* Hybrid game model for LWE                                                   *)
+(* --------------------------------------------------------------------------- *)
+clone import Hybrid as Hyb with
+type input    <- unit,
+type output   <- vector,
+type inleaks  <- unit,
+type outleaks <- seed*matrix,
+type outputA  <- bool,
+op q <- l
+proof q_ge0 by trivial
+proof *.
+
+module type Adv_M_Orclb (Adv: Adv_M, Ob: Orclb, O: Orcl)= {
+  proc main() : bool
+}.
+
+module LWE_Ob : Orclb = {
+  var sd: seed
+  var _B: matrix
+
+  proc leaks(): seed*matrix = {
+    sd <$ dseed;
+    _B <$ duni_matrix m k;
+    return (sd, _B);
+  }
+
+  proc orclL (): vector = {
+    var sc, ec, v, _A;
+    _A <- G sd m n;
+
+    sc <$ dvector Chi m;
+    ec <$ dvector Chi (n + k);
+    v <- sc ^* (_A || _B) + ec;
+
+    return v;
+  }
+
+  proc orclR (): vector = {
+    var v;
+
+    v <$ dvector duni_R (n + k);
+    return v;
+  }
+}.
+
+(* mock hybrid Ob oracle *)
+module ObFake = {
+  var sd: seed
+  var _B: matrix
+
+  proc leaks(): seed*matrix = {
+    return (sd, _B);
+  }
+
+  proc orclL (): vector = {
+      var sc, ec, v, _A;
+      _A <- G sd m n;
+      sc <$ dvector Chi m;
+      ec <$ dvector Chi (n + k);
+      v <- sc ^* (_A || _B) + ec;
+
+      return v;
+  }
+
+  proc orclR (): vector = {
+      var v';
+      v' <$ dvector duni_R (n + k);
+      return v';
+  }
+}.
+
+(* For linking LWE matrix adversary to LWE non-hybrid game adversary *)
+module B(Adv : Adv_M) (Ob: Orclb) (O: Orcl) = {
+  var sd: seed
+
+  proc main(): bool = {
+    var b', i, u, c, cs, _A, _B;
+
+    (sd, _B) <@ Ob.leaks();
+
+    _A <- G sd m n;
+
+    cs <- [];
+    i <- 0;
+
+    while (i < l) {
+        c <@ O.orcl();
+        cs <- rcons cs c;
+
+        i <- i + 1;
+    }
+
+    u <- trmx (ofcols (n + k) l cs);
+
+    b' <@ Adv.guess(sd, _B, u);
+    return b';
+  }
+}.
+
+(* LWE matrix computation *)
+lemma LWE_M_L (A<: Adv_M{-Count, -B, -LWE_Ob, -LWE_M_Loop}) &m:
+    Pr[LWE_M_Loop(A).main(false) @ &m : res] = Pr[Ln(LWE_Ob, B(A)).main() @ &m: res].
+proof.
+move => *.
+byequiv => //=.
+proc; inline *; wp.
+call (: true) => //=; wp.
++ while (={i} /\ u0cs{1} = cs{2} /\
+      LWE_M_Loop.sd{1} = LWE_Ob.sd{2} /\
+      _B{1} = LWE_Ob._B{2} /\
+      _A{1} = G LWE_M_Loop.sd{1} m n
+  ).
+  + wp. rnd{1}.
+    by auto => /#.
+  + by auto => /#.
+qed.
+
+(* LWE matrix random sampling *)
+lemma LWE_M_R (A<: Adv_M{-Count, -B, -LWE_Ob, -LWE_M_Loop}) &m:
+    Pr[LWE_M_Loop(A).main(true) @ &m : res] = Pr[Rn(LWE_Ob, B(A)).main() @ &m: res].
+proof.
+move => *.
+byequiv => //.
+proc; inline *; wp.
+call (: true) => //=; wp.
++ while (={i} /\ u1cs{1} = cs{2} /\
+      LWE_M_Loop.sd{1} = LWE_Ob.sd{2} /\
+      _B{1} = LWE_Ob._B{2} /\
+      _A{1} = G LWE_M_Loop.sd{1} m n
+  ).
+  + by auto => /#.
+  + by auto => /#.
+qed.
+
+(* --------------------------------------------------------------------------------*)
+(* For linking LWE vector adversary to LWE Hybrid Game adversary using PROM theory *)
+(* ------------------------------------------------------------------------------- *)
+clone PROM.FullRO as LWE_RO with
+  type in_t <- seed * matrix * bool, (* (sd,_B,sample) *)
+  type out_t <- vector,
+  type d_in_t <- bool,
+  type d_out_t <- bool,
+  op doubt <- fun (din: seed * matrix * bool) =>
+    if din.`3
+    then dvector duni_R (n + k)
+    else dlet (dvector Chi m) (fun (s: vector) =>
+            dmap (dvector Chi (n+k)) (fun (e: vector) => s ^* (G din.`1 m n || din.`2) + e))
+  proof *.
+
+(* mock hybrid game for vector adversary, so that we can link LWE vector adversary with LWE Hybrid Game adversary *)
+module Hyb_Mock(Adv : AdvOrclb): Adv_V = {
+  var v: vector
+
+  module OFake = {
+    proc orcl(): vector = {
+      return v;
+    }
+  }
+
+  proc guess(sd: seed, _B: matrix, v': vector) : bool = {
+    var b;
+    v <- v';
+    ObFake.sd <- sd;
+    ObFake._B <- _B;
+
+    b <@ HybGame(Adv, ObFake, OFake).main();
+    return b;
+  }
+}.
+
+(* auxiliary game for linking vector adversary with hybrid mock and LWE Hybrid Game adversary utilizing PROM *)
+module LWE_V_Aux (Adv: Adv_M) (O: LWE_RO.RO) = {
+  var b: bool
+
+  module OFake = {
+    proc orcl(): vector = {
+      var v;
+      v <@ O.get(ObFake.sd, ObFake._B, b);
+      return v;
+    }
+  }
+
+  proc distinguish(b': bool): bool = {
+    b <- b';
+    ObFake.sd <$ dseed;
+    ObFake._B <$ duni_matrix m k;
+    O.sample(ObFake.sd, ObFake._B, b);
+    b <@ HybGame(B(Adv), ObFake, OFake).main();
+    return b;
+  }
+}.
+
+lemma LWE_V_Aux (A <: Adv_M{-LWE_RO.RO, -Hyb_Mock, -LWE_V_Aux, -LWE_V}) b &m:
+    Pr[LWE_V(Hyb_Mock(B(A))).main(b) @ &m: res] = Pr[LWE_RO.MainD(LWE_V_Aux(A), LWE_RO.RO).distinguish(b) @ &m: res].
+proof.
+byequiv => //.
+proc; inline *; wp.
+call (: ={ObFake.sd, ObFake._B}); wp.
+while (={i, cs, HybOrcl.l0, HybOrcl.l, ObFake.sd, ObFake._B} /\
+  Hyb_Mock.v{1} = r1{2} /\
+  LWE_RO.RO.m{2}.[(ObFake.sd{2},ObFake._B{2},LWE_V_Aux.b{2})] = Some r1{2}
+).
++ sp.
+    + if => //=.
+      auto.
+    + if => //=.
+      wp. auto => //= /> &2.
+      case (LWE_V_Aux.b{2}).
+      + rewrite //= domNE => /> /#.
+      + rewrite //= domNE dlet_ll => /> *.
+        + by rewrite dmap_ll.
+        rewrite /#.
+    + by auto.
++ wp. rnd. wp.
+  case (b).
+  + rnd; wp; rnd{1}; rnd{1}; auto => //= /> *.
+    by rewrite /dom emptyE //= get_set_sameE.
+  + rnd{1}. swap {1} 3 -1.
+    rndsem*{1} 2.
+    auto => //= /> *.
+    by rewrite get_setE /dom emptyE.
+qed.
+
+lemma LWE_V_L_Aux (A <: Adv_M{-LWE_Ob, -LWE_RO.RO, -LWE_V_Aux}) &m:
+    Pr[LWE_RO.MainD(LWE_V_Aux(A), LWE_RO.LRO).distinguish(false) @ &m: res] = Pr[HybGame(B(A), LWE_Ob, L(LWE_Ob)).main() @ &m: res].
+proof.
+byequiv => //.
+proc; inline *; wp.
+call (: ObFake.sd{1} = LWE_Ob.sd{2} /\ ObFake._B{1} = LWE_Ob._B{2}); wp.
+while (={i, HybOrcl.l0, HybOrcl.l, cs} /\
+  ObFake.sd{1} = LWE_Ob.sd{2} /\
+  ObFake._B{1} = LWE_Ob._B{2} /\
+  LWE_RO.RO.m{1}.[(ObFake.sd{1}, ObFake._B{1}, LWE_V_Aux.b{1})] = (HybOrcl.l0{1} < HybOrcl.l{1}) ? Some v0{1} : None /\
+  !LWE_V_Aux.b{1}
+).
++ sp.
+  + if => //=.
+    by auto => /#.
+  + if => //=.
+    wp 3 5.
+    rndsem*{2} 1.
+    auto => //= />.
+    rewrite domE => *.
+    rewrite get_set_sameE /#.
+  + by auto => /#.
++ swap {2} [1..2] 2.
+  auto => //= /> ? ? ? ? ? ?.
+  by rewrite emptyE DInterval.supp_dinter /#.
+qed.
+
+lemma LWE_V_L (A <: Adv_M{-Hyb_Mock, -LWE_Ob, -LWE_RO.RO, -LWE_RO.FRO, -LWE_V, -LWE_V_Aux}) &m:
+      Pr[LWE_V(Hyb_Mock(B(A))).main(false) @ &m: res] = Pr[HybGame(B(A),LWE_Ob,L(LWE_Ob)).main() @ &m: res].
+proof.
+rewrite (LWE_V_Aux A false _) -(LWE_V_L_Aux A _).
+byequiv (LWE_RO.FullEager.RO_LRO (LWE_V_Aux(A)) _) => // x.
+case (x.`3) => h //.
+by rewrite dlet_ll // => *; rewrite dmap_ll.
+qed.
+
+lemma LWE_V_R_Aux (A <: Adv_M{-LWE_Ob, -LWE_RO.RO, -LWE_V_Aux}) &m:
+    Pr[LWE_RO.MainD(LWE_V_Aux(A), LWE_RO.LRO).distinguish(true) @ &m: res] = Pr[HybGame(B(A), LWE_Ob, R(LWE_Ob)).main() @ &m: res].
+proof.
+byequiv => //.
+proc; inline *; wp.
+call (: ObFake.sd{1} = LWE_Ob.sd{2} /\ ObFake._B{1} = LWE_Ob._B{2}); wp.
+while (={i, HybOrcl.l0, HybOrcl.l, cs} /\
+  ObFake.sd{1} = LWE_Ob.sd{2} /\
+  ObFake._B{1} = LWE_Ob._B{2} /\
+  LWE_RO.RO.m{1}.[(ObFake.sd{1}, ObFake._B{1}, LWE_V_Aux.b{1})] = (HybOrcl.l0{1} < HybOrcl.l{1}) ? Some v0{1} : None /\
+  LWE_V_Aux.b{1}
+).
++ sp.
+  + if => //=.
+    by auto => /#.
+  + if => //=.
+    auto => //= /> *.
+    rewrite get_set_sameE => //= /#.
+  + by auto => /#.
++ swap {2} [1..2] 2.
+  auto => //= /> ? ? ? ? ? ?.
+    by rewrite DInterval.supp_dinter emptyE => /#.
+qed.
+
+lemma LWE_V_R (A <: Adv_M{-Hyb_Mock, -LWE_Ob, -LWE_RO.RO, -LWE_RO.FRO, -LWE_V, -LWE_V_Aux}) &m:
+      Pr[LWE_V(Hyb_Mock(B(A))).main(true) @ &m: res] = Pr[HybGame(B(A),LWE_Ob,R(LWE_Ob)).main() @ &m: res].
+proof.
+rewrite (LWE_V_Aux A true _) -(LWE_V_R_Aux A _).
+byequiv (LWE_RO.FullEager.RO_LRO (LWE_V_Aux(A)) _) => // x.
+case (x.`3) => h //.
+by rewrite dlet_ll // => *; rewrite dmap_ll.
+qed.
+
+lemma LWE_H_Hybrid (A <: Adv_M{-Count, -LWE_Ob, -LWE_M_Loop, -Hyb_Mock, -LWE_RO.RO, -LWE_RO.FRO, -LWE_V, -LWE_V_Aux}) &m :
+    islossless A.guess =>
+    Pr[LWE_M(A).main(false) @ &m : res] - Pr[LWE_M(A).main(true) @ &m : res]
+  = l%r * (Pr[LWE_V(Hyb_Mock(B(A))).main(false) @ &m : res] - Pr[LWE_V(Hyb_Mock(B(A))).main(true) @ &m : res]).
+proof.
+move => A_ll.
+rewrite !(LWE_M_Eq A).
+rewrite (LWE_M_L A) (LWE_M_R A) (LWE_V_L A) (LWE_V_R A).
+apply (Hybrid_restr LWE_Ob (B(A)) _ _ _ _ _ &m (fun _ _ _ r => r)).
+move => *.
+proc; inline *.
+wp. call (:true). wp.
+while (i = Count.c /\ i <= l).
++ auto. call(:true). auto => />. by rewrite ltzE.
++ auto => //=.
++ auto => //=.
++ by islossless.
++ by islossless.
++ by islossless.
++ move => *.
+  proc; call (:true); wp.
+  while (i <= l) (l - i) => *;
+  wp; call (:true);  auto => /> /#.
+qed.
+
+end LWE_Hybrid.
+
+(* --------------- *)
+(* LWE adversaries *)
+(* --------------- *)
+op H : seed -> int -> int -> matrix.
+op n : { int | 0 < n } as gt0_n.
+op nb : { int | 0 < nb } as gt0_nb.
+op mb : { int | 0 < mb } as gt0_mb.
+
+hint exact: gt0_n gt0_nb gt0_mb.
+
+lemma ge0_n: 0 <= n.
+proof. by apply ltrW. qed.
+
+lemma ge0_mb: 0 <= mb.
+proof. by apply ltrW. qed.
+
+lemma ge0_nb: 0 <= nb.
+proof. by apply ltrW. qed.
+
+hint exact: ge0_n ge0_nb ge0_mb.
+hint simplify (ge0_n,ge0_nb,ge0_mb).
+module type HAdv1_M = {
+   proc guess(sd : seed, u : matrix) : bool
+}.
+
+module type HAdv1_V = {
+   proc guess(sd : seed, u : vector) : bool
+}.
+
 module type Adv_T = {
    proc guess(A : matrix, uvw : matrix * matrix * matrix) : bool
 }.
@@ -135,26 +580,6 @@ module LWE(Adv : Adv_T) = {
 
 }.
 
-(* --------------------------------------------------------------------------- *)
-(* Version of LWE using a concrete hash function to derive the matrix          *)
-(* --------------------------------------------------------------------------- *)
-type seed.
-op H : seed -> int -> int -> matrix.
-
-(* --------------------------------------------------------------------------- *)
-op [lossless] dseed : seed distr.
-
-(* --------------------------------------------------------------------------- *)
-(* LWE adversaries                                                             *)
-(* --------------------------------------------------------------------------- *)
-module type HAdv1_M = {
-   proc guess(sd : seed, u : matrix) : bool
-}.
-
-module type HAdv1_V = {
-   proc guess(sd : seed, u : vector) : bool
-}.
-
 (* LWE adversary *)
 module LWE_H1(Adv : HAdv1_M) = {
   var sd: seed
@@ -173,394 +598,6 @@ module LWE_H1(Adv : HAdv1_M) = {
     return b';
    }
 }.
-
-(* LWE Matrix adversary *)
-module LWE_M1(Adv: HAdv1_M) = {
-  var sd: seed
-  var _A: matrix
-
-  proc main(b: bool) : bool = {
-    var b', sc, ec, i, u0, u1, u0c, u1c, u0cs, u1cs;
-
-    sd <$ dseed;
-    _A <- H sd n n;
-
-    u0cs <- [];
-    u1cs <- [];
-    i <- 0;
-    while (i < nb) {
-      sc <$ dvector Chi n;
-      ec <$ dvector Chi n;
-
-      u0c <- _A *^ sc + ec;
-      u1c <$ dvector duni_R n;
-      u0cs <- rcons u0cs u0c;
-      u1cs <- rcons u1cs u1c;
-
-      i <- i + 1;
-    }
-
-    u0 <- ofcols n nb u0cs;
-    u1 <- ofcols n nb u1cs;
-
-    b' <@ Adv.guess(sd, if b then u1 else u0);
-    return b';
-   }
-}.
-
-(* LWE Vector adversary *)
-module LWE_V1(Adv: HAdv1_V) = {
-  proc main(b: bool) : bool = {
-    var sd, b', _A, sc, ec, u0, u1;
-
-    sd <$ dseed;
-    _A <- H sd n n;
-
-    sc <$ dvector Chi n;
-    ec <$ dvector Chi n;
-    u0 <- _A *^ sc + ec;
-
-    u1 <$ dvector duni_R n;
-
-    b' <@ Adv.guess(sd, if b then u1 else u0);
-    return b';
-   }
-}.
-
-(* --------------------------------------------------------------------------- *)
-(* Hybrid game model for LWE                                                   *)
-(* --------------------------------------------------------------------------- *)
-clone import Hybrid as Hybrid_H1 with
-type input    <- unit,
-type output   <- vector,
-type inleaks  <- unit,
-type outleaks <- seed,
-type outputA  <- bool,
-op q <- nb
-proof q_ge0 by trivial
-proof *.
-
-module LWE_H1_Ob : Orclb = {
-  var sd: seed
-  var _A: matrix
-
-  proc leaks(): seed = {
-    sd <$ dseed;
-    _A <- H sd n n;
-    return sd;
-  }
-
-  proc orclL (): vector = {
-    var si, ei;
-    si <$ dvector Chi n;
-    ei <$ dvector Chi n;
-    return _A *^ si + ei;
-  }
-
-  proc orclR (): vector = {
-    var v;
-    v <$ dvector duni_R n;
-    return v;
-  }
-}.
-
-(* For linking LWE matrix adversary to LWE non-hybrid game adversary *)
-module B(Adv : HAdv1_M) (Ob: Orclb) (O: Orcl) = {
-
-  proc main(): bool = {
-    var sd, b', i, u, c, cs;
-
-    sd <@ Ob.leaks();
-
-    cs <- [];
-    i <- 0;
-    while (i < nb) {
-      c <@ O.orcl();
-      cs <- rcons cs c;
-
-      i <- i + 1;
-    }
-
-    u <- ofcols n nb cs;
-
-    b' <@ Adv.guess(sd, u);
-    return b';
-  }
-
-}.
-
-(* LWE matrix computation *)
-lemma LWE_M1_L (A<: HAdv1_M{-Count, -LWE_H1_Ob, -LWE_M1}) &m:
-    Pr[LWE_M1(A).main(false) @ &m : res] = Pr[Ln(LWE_H1_Ob, B(A)).main() @ &m: res].
-proof.
-byequiv => //.
-proc. inline *.
-wp.
-call (: LWE_M1.sd{1} = LWE_H1_Ob.sd{2} ) => //=.
-wp.
-while (u0cs{1} = cs{2} /\ i{1} = i{2} /\ LWE_M1._A{1} = LWE_H1_Ob._A{2}).
-+ wp.
-  rnd{1}. auto => //=.
-+ by auto.
-qed.
-
-(* LWE matrix random sampling *)
-lemma LWE_M1_R (A <: HAdv1_M{-Count, -LWE_H1_Ob, -LWE_M1}) &m:
-    Pr[LWE_M1(A).main(true) @ &m : res] = Pr[Rn(LWE_H1_Ob, B(A)).main() @ &m: res].
-proof.
-byequiv => //.
-proc. inline *.
-wp.
-call (: LWE_M1.sd{1} = LWE_H1_Ob.sd{2} ) => //=.
-wp.
-while (u1cs{1} = cs{2} /\ i{1} = i{2} /\ LWE_M1._A{1} = LWE_H1_Ob._A{2}).
-+ wp.
-  rnd. auto.
-+ by auto.
-qed.
-
-(* --------------------------------------------------------------------------------*)
-(* For linking LWE vector adversary to LWE Hybrid Game adversary using PROM theory *)
-(* ------------------------------------------------------------------------------- *)
-clone PROM.FullRO as LWE_V1_L with
-  type in_t <- seed,
-  type out_t <- vector,
-  type d_in_t <- unit,
-  type d_out_t <- bool,
-  op dout <- fun (sd: seed) => dlet (dvector Chi n) (fun (s: vector) =>
-    dmap (dvector Chi n) (fun (e: vector) => H sd n n *^ s + e))
-  proof *.
-
-clone PROM.FullRO as LWE_V1_R with
-  type in_t <- seed,
-  type out_t <- vector,
-  type d_in_t <- unit,
-  type d_out_t <- bool,
-  op dout <- fun _ => dvector duni_R n
-  proof *.
-
-(* mock hybrid Ob oracle *)
-module ObFake = {
-  var sd: seed
-
-  proc leaks(): seed = {
-    return sd;
-  }
-
-  proc orclL (): vector = {
-      var _A, si, ei;
-      _A <- H sd n n;
-      si <$ dvector Chi n;
-      ei <$ dvector Chi n;
-      return _A *^ si + ei;
-  }
-
-  proc orclR (): vector = {
-      var v';
-      v' <$ dvector duni_R n;
-      return v';
-  }
-}.
-
-
-(* mock hybrid game for vector adversary, so that we can link LWE vector adversary with LWE Hybrid Game adversary *)
-module HAdv1_C(A : HAdv1_M) = {
-  var v: vector
-
-  module OFake = {
-    proc orcl(): vector = {
-      return v;
-    }
-  }
-
-  proc guess(sd': seed, v': vector) : bool = {
-    var b;
-    v <- v';
-    ObFake.sd <- sd';
-    b <@ HybGame(B(A), ObFake, OFake).main();
-    return b;
-  }
-}.
-
-(* auxiliary game for linking vector adversary with hybrid mock and LWE Hybrid Game adversary utilizing PROM *)
-module LWE_V1_AuxL (A: HAdv1_M) (O: LWE_V1_L.RO) = {
-  module OFake = {
-    proc orcl(): vector = {
-      var v;
-      v <@ O.get(ObFake.sd);
-      return v;
-    }
-  }
-
-  proc distinguish(): bool = {
-    var b;
-    ObFake.sd <$ dseed;
-    O.sample(ObFake.sd);
-    b <@ HybGame(B(A), ObFake, OFake).main();
-    return b;
-  }
-}.
-
-module LWE_V1_AuxR (A: HAdv1_M) (O: LWE_V1_R.RO) = {
-  module OFake = {
-    proc orcl(): vector = {
-      var v;
-      v <@ O.get(ObFake.sd);
-      return v;
-    }
-  }
-
-  proc distinguish(): bool = {
-    var b;
-    ObFake.sd <$ dseed;
-    O.sample(ObFake.sd);
-    b <@ HybGame(B(A), ObFake, OFake).main();
-    return b;
-  }
-}.
-
-lemma LWE_V1_L_Aux1 (A <: HAdv1_M{-LWE_V1_L.RO, -HAdv1_C}) &m:
-    Pr[LWE_V1(HAdv1_C(A)).main(false) @ &m: res] = Pr[LWE_V1_L.MainD(LWE_V1_AuxL(A), LWE_V1_L.RO).distinguish() @ &m: res].
-proof.
-byequiv => //.
-proc.
-inline *.
-wp.
-call (: ={ObFake.sd}).
-wp.
-while (={i, cs, HybOrcl.l0, HybOrcl.l, ObFake.sd} /\ HAdv1_C.v{1} = r1{2} /\ LWE_V1_L.RO.m{2}.[ObFake.sd{2}] = Some r1{2}).
-+ sp.
-  + if => //=.
-    auto.
-  + if => //=.
-    wp. auto => //=.
-    move => &1 &2.
-    case; case; case; case; case.
-    move => ?; case.
-    move => ?; case.
-    move => ?; case.
-    move => ? ?; case.
-    move => ? ?; case.
-    move => *.
-    split.
-    + by rewrite dlet_ll // => *; rewrite dmap_ll.
-    + move => *.
-      have ->: ObFake.sd{2} \in LWE_V1_L.RO.m{2}.
-      + rewrite fmapP.
-        by exists r1{2}.
-      rewrite //= /#.
-  + auto.
-+ wp. rnd. wp. rnd{1}.
-  rndsem*{1} 1.
-  wp. rnd.
-  auto => //= /> *.
-  by rewrite get_setE /dom emptyE.
-qed.
-
-lemma LWE_V1_L_Aux2 (A <: HAdv1_M{-HAdv1_C, -LWE_H1_Ob, -LWE_V1_L.RO}) &m:
-    Pr[LWE_V1_L.MainD(LWE_V1_AuxL(A), LWE_V1_L.LRO).distinguish() @ &m: res] = Pr[HybGame(B(A), LWE_H1_Ob, L(LWE_H1_Ob)).main() @ &m: res].
-proof.
-byequiv => //.
-proc.
-inline *; wp.
-call (: ObFake.sd{1} = LWE_H1_Ob.sd{2}); wp.
-while (={i, HybOrcl.l0, HybOrcl.l, cs} /\
-  ObFake.sd{1} = LWE_H1_Ob.sd{2} /\
-  LWE_H1_Ob._A{2} = H LWE_H1_Ob.sd{2} n n /\
-  LWE_V1_L.RO.m{1}.[ObFake.sd{1}] = (HybOrcl.l0{1} < HybOrcl.l{1}) ? Some v{1} : None
-).
-+ sp.
-  + if => //=.
-    by auto => /#.
-  + if => //=.
-    wp 3 4.
-    rndsem*{2} 1.
-    auto => //= /> *.
-    rewrite domE get_set_sameE => //= /#.
-  + by auto => /#.
-+ swap {2} [1..2] 2.
-  auto => //= /> ? ? ? ?.
-  by rewrite DInterval.supp_dinter emptyE => /#.
-qed.
-
-lemma LWE_V1_L (A <: HAdv1_M{-HAdv1_C, -LWE_H1_Ob, -LWE_V1_L.RO, -LWE_V1_L.FRO}) &m:
-      Pr[LWE_V1(HAdv1_C(A)).main(false) @ &m: res] = Pr[HybGame(B(A),LWE_H1_Ob,L(LWE_H1_Ob)).main() @ &m: res].
-proof.
-rewrite (LWE_V1_L_Aux1 A _) -(LWE_V1_L_Aux2 A _).
-byequiv (LWE_V1_L.FullEager.RO_LRO (LWE_V1_AuxL(A)) _) => // *.
-by rewrite dlet_ll // => *; rewrite dmap_ll.
-qed.
-
-lemma LWE_V1_R_Aux1 (A <: HAdv1_M{-LWE_V1_R.RO, -HAdv1_C}) &m:
-    Pr[LWE_V1(HAdv1_C(A)).main(true) @ &m: res] = Pr[LWE_V1_R.MainD(LWE_V1_AuxR(A), LWE_V1_R.RO).distinguish() @ &m: res].
-proof.
-byequiv => //.
-proc; inline *; wp.
-call (:true).
-wp.
-while (={i, cs, HybOrcl.l0, HybOrcl.l, ObFake.sd} /\ HAdv1_C.v{1} = r1{2} /\ LWE_V1_R.RO.m{2}.[ObFake.sd{2}] = Some r1{2}).
-+ sp.
-  + if => //=.
-    by auto.
-  + if => //=.
-    by auto => //= /> /#.
-  + by auto.
-+ wp. rnd. wp. rnd. wp. rnd{1}. rnd{1}. wp. rnd. auto => //= /> *.
-  by rewrite /dom emptyE //= get_set_sameE.
-qed.
-
-lemma LWE_V1_R_Aux2 (A <: HAdv1_M{-HAdv1_C, -LWE_H1_Ob, -LWE_V1_R.RO}) &m:
-    Pr[LWE_V1_R.MainD(LWE_V1_AuxR(A), LWE_V1_R.LRO).distinguish() @ &m: res] = Pr[HybGame(B(A), LWE_H1_Ob, R(LWE_H1_Ob)).main() @ &m: res].
-proof.
-byequiv => //.
-proc; inline *; wp.
-call (:true); wp.
-while (={i, HybOrcl.l0, HybOrcl.l, cs} /\
-  ObFake.sd{1} = LWE_H1_Ob.sd{2} /\
-  LWE_H1_Ob._A{2} = H LWE_H1_Ob.sd{2} n n /\
-  LWE_V1_R.RO.m{1}.[ObFake.sd{1}] = (HybOrcl.l0{1} < HybOrcl.l{1}) ? Some v{1} : None
-).
-+ sp.
-  + if => //=.
-    by auto => /#.
-  + if => //=.
-    auto => //= /> *.
-    rewrite get_set_sameE => //= /#.
-  + by auto => /#. 
-+ swap {2} [1..2] 2.
-  auto => //= /> ? ? ? ?.
-    by rewrite DInterval.supp_dinter emptyE => /#.
-qed.
-
-lemma LWE_V1_R (A <: HAdv1_M{-HAdv1_C, -LWE_H1_Ob, -LWE_V1_R.RO, -LWE_V1_R.FRO}) &m:
-      Pr[LWE_V1(HAdv1_C(A)).main(true) @ &m: res] = Pr[HybGame(B(A),LWE_H1_Ob,R(LWE_H1_Ob)).main() @ &m: res].
-proof.
-rewrite (LWE_V1_R_Aux1 A _) -(LWE_V1_R_Aux2 A _).
-byequiv (LWE_V1_R.FullEager.RO_LRO (LWE_V1_AuxR(A)) _) => // *.
-qed.
-
-lemma LWE_H1_Hybrid (A <: HAdv1_M{-Count, -LWE_H1_Ob, -LWE_M1, -HAdv1_C, -LWE_V1_L.RO, -LWE_V1_L.FRO, -LWE_V1_R.RO, -LWE_V1_R.FRO}) &m :
-    islossless A.guess =>
-    Pr[LWE_M1(A).main(false) @ &m : res] - Pr[LWE_M1(A).main(true) @ &m : res]
-  = nb%r * (Pr[LWE_V1(HAdv1_C(A)).main(false) @ &m : res] - Pr[LWE_V1(HAdv1_C(A)).main(true) @ &m : res]).
-proof.
-move => A_ll.
-rewrite (LWE_M1_L A) (LWE_M1_R A) (LWE_V1_L A) (LWE_V1_R A).
-apply (Hybrid_restr LWE_H1_Ob (B(A)) _ _ _ _ _ &m (fun _ _ _ r => r)).
-move => *.
-proc; inline *.
-wp. call (:true). wp.
-while (i = Count.c /\ i <= nb).
-+ auto. call(:true). auto => />. by rewrite ltzE.
-+ auto => //=.
-+ by islossless.
-+ by islossless.
-+ by islossless.
-+ move => *.
-  proc; call (:true); wp.
-  while (i <= nb) (nb - i) => *;
-  wp; call (:true);  auto => /#.
-qed.
 
 module type HAdv2_T = {
    proc guess(sd : seed, _B : matrix, uv : matrix * matrix) : bool
