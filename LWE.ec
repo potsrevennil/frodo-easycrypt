@@ -57,6 +57,7 @@ lemma ge0_nb: 0 <= nb.
 proof. by apply ltrW. qed.
 
 hint exact: ge0_n ge0_nb ge0_mb.
+hint simplify (ge0_n,ge0_nb,ge0_mb).
 
 (* --------------------------------------------------------------------------- *)
 (* Uniform distribution over R *)
@@ -289,7 +290,7 @@ module B(Adv : HAdv1_M) (Ob: Orclb) (O: Orcl) = {
 }.
 
 (* LWE matrix computation *)
-lemma LWE_M1_BL (A<: HAdv1_M{-Count, -LWE_H1_Ob, -LWE_M1}) &m:
+lemma LWE_M1_L (A<: HAdv1_M{-Count, -LWE_H1_Ob, -LWE_M1}) &m:
     Pr[LWE_M1(A).main(false) @ &m : res] = Pr[Ln(LWE_H1_Ob, B(A)).main() @ &m: res].
 proof.
 byequiv => //.
@@ -304,7 +305,7 @@ while (u0cs{1} = cs{2} /\ i{1} = i{2} /\ LWE_M1._A{1} = LWE_H1_Ob._A{2}).
 qed.
 
 (* LWE matrix random sampling *)
-lemma LWE_M1_BR (A <: HAdv1_M{-Count, -LWE_H1_Ob, -LWE_M1}) &m:
+lemma LWE_M1_R (A <: HAdv1_M{-Count, -LWE_H1_Ob, -LWE_M1}) &m:
     Pr[LWE_M1(A).main(true) @ &m : res] = Pr[Rn(LWE_H1_Ob, B(A)).main() @ &m: res].
 proof.
 byequiv => //.
@@ -538,21 +539,27 @@ rewrite (LWE_V1_R_Aux1 A _) -(LWE_V1_R_Aux2 A _).
 byequiv (LWE_V1_R.FullEager.RO_LRO (LWE_V1_AuxR(A)) _) => // *.
 qed.
 
-(* bound by nb * (LWE_0 and LWE_1) *)
-lemma LWE_H1_Hybrid (A <: HAdv1_M) &m :
+lemma LWE_H1_Hybrid (A <: HAdv1_M{-Count, -LWE_H1_Ob, -LWE_M1, -HAdv1_C, -LWE_V1_L.RO, -LWE_V1_L.FRO, -LWE_V1_R.RO, -LWE_V1_R.FRO}) &m :
+    islossless A.guess =>
     Pr[LWE_M1(A).main(false) @ &m : res] - Pr[LWE_M1(A).main(true) @ &m : res]
   = nb%r * (Pr[LWE_V1(HAdv1_C(A)).main(false) @ &m : res] - Pr[LWE_V1(HAdv1_C(A)).main(true) @ &m : res]).
 proof.
-admit.
-qed.
-
-lemma LWE_H1_Hybrid_restr &m (Adv <: HAdv1_M) :
-    Pr[Ln(LWE_H1_Ob, B(Adv)).main() @ &m: res]
-  - Pr[Rn(LWE_H1_Ob, B(Adv)).main() @ &m: res]
-  = nb%r * (Pr[HybGame(B(Adv),LWE_H1_Ob,L(LWE_H1_Ob)).main() @ &m: res]
-          - Pr[HybGame(B(Adv),LWE_H1_Ob,R(LWE_H1_Ob)).main() @ &m: res]).
-proof.
-admit.
+move => A_ll.
+rewrite (LWE_M1_L A) (LWE_M1_R A) (LWE_V1_L A) (LWE_V1_R A).
+apply (Hybrid_restr LWE_H1_Ob (B(A)) _ _ _ _ _ &m (fun _ _ _ r => r)).
+move => *.
+proc; inline *.
+wp. call (:true). wp.
+while (i = Count.c /\ i <= nb).
++ auto. call(:true). auto => />. by rewrite ltzE.
++ auto => //=.
++ by islossless.
++ by islossless.
++ by islossless.
++ move => *.
+  proc; call (:true); wp.
+  while (i <= nb) (nb - i) => *;
+  wp; call (:true);  auto => /#.
 qed.
 
 module type HAdv2_T = {
