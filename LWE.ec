@@ -157,21 +157,21 @@ module type HAdv1_V = {
 
 (* LWE adversary *)
 module LWE_H1(Adv : HAdv1_M) = {
+  var sd: seed
 
   proc main(b : bool) : bool = {
-    var seed, b', _A, s, e, u0, u1;
+    var b', _A, s, e, u0, u1;
 
-    seed <$ dseed;
-    _A <- H seed n n;
+    sd <$ dseed;
+    _A <- H sd n n;
     s <$ Chi_matrix n nb;
     e <$ Chi_matrix n nb;
     u0 <- _A * s + e;
     u1 <$ duni_matrix n nb;
 
-    b' <@ Adv.guess(seed, if b then u1 else u0);
+    b' <@ Adv.guess(sd, if b then u1 else u0);
     return b';
    }
-
 }.
 
 (* LWE Matrix adversary *)
