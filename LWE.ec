@@ -343,7 +343,7 @@ clone PROM.FullRO as LWE_RO with
   type out_t <- vector,
   type d_in_t <- bool,
   type d_out_t <- bool,
-  op doubt <- fun (din: seed * matrix * bool) =>
+  op dout <- fun (din: seed * matrix * bool) =>
     if din.`3
     then dvector duni_R (n + k)
     else dlet (dvector Chi m) (fun (s: vector) =>
@@ -520,72 +520,172 @@ qed.
 
 end LWE_Hybrid.
 
+(* --------------------- *)
+(*  dyn matrix lemmas    *)
+(* --------------------- *)
+
+lemma eq_tuple_imply_fst (x z: 'a) (y w: 'b): (x, y) = (z, w) => (x, y).`1 = (z, w).`1.
+proof. done. qed.
+
+lemma eq_tuple_imply_snd (x z: 'a) (y w: 'b): (x, y) = (z, w) => (x, y).`2 = (z, w).`2.
+proof. done. qed.
+
+lemma eq_tuple_swap (x z: 'a) (y w: 'b): (x, y) = (z, w) <=> (y, x) = (w, z).
+proof. done. qed.
+
+lemma dmatrix_rows m d r c: 0 <= r => 0 <= c => m \in dmatrix d r c => rows m = r.
+proof.
+    move => *.
+    rewrite -(fst_pair (rows m) (cols m)) -(fst_pair r c).
+    by apply /eq_tuple_imply_fst/(size_dmatrix d r c) => /#.
+qed.
+
+lemma dmatrix_cols m d r c: 0 <= r => 0 <= c => m \in dmatrix d r c => cols m = c.
+proof.
+    move => *.
+    rewrite -(snd_pair (rows m) (cols m)) -(snd_pair r c).
+    by apply /eq_tuple_imply_snd/(size_dmatrix d r c) => /#.
+qed.
+
+lemma dmatrix_rows_tr m d r c: 0 <= r => 0 <= c => m \in dmatrix d r c => rows (trmx m) = c.
+proof.
+    move => *.
+    rewrite rows_tr. by apply (dmatrix_cols m d r).
+qed.
+
+lemma dmatrix_cols_tr m d r c: 0 <= r => 0 <= c => m \in dmatrix d r c => cols (trmx m) = r.
+proof.
+    move => *.
+    rewrite cols_tr. by apply (dmatrix_rows m d r c).
+qed.
+
+lemma cancel_addm0 m d r c: 0 <= r => 0 <= c => m \in dmatrix d r c => m = m + zerom r c.
+proof.
+    move => *.
+    rewrite lin_addm0 => //; rewrite eq_sym.
+    + by apply (dmatrix_rows m d r c).
+    + by apply (dmatrix_cols m d r c).
+qed.
+
+lemma cancel_add0m m d r c: 0 <= r => 0 <= c => m \in dmatrix d r c => m = zerom r c + m.
+proof.
+   move => *.
+   rewrite addmC.
+   by apply (cancel_addm0 m d r c).
+qed.
+
+lemma duni_matrix_rows m r c: 0 <= r => 0 <= c => m \in duni_matrix r c => rows m = r.
+proof.
+    rewrite /duni_matrix => *. by apply (dmatrix_rows m duni_R r c).
+qed.
+
+lemma duni_matrix_cols m r c: 0 <= r => 0 <= c => m \in duni_matrix r c => cols m = c.
+proof.
+    rewrite /duni_matrix => *; by apply (dmatrix_cols m duni_R r c).
+qed.
+
+lemma supp_dmatrix_tr m d r c: 0 <= r => 0 <= c =>
+    m \in dmatrix d r c =>
+    trmx m \in dmatrix d c r.
+proof.
+move => ? ? ^ ?.
+rewrite !supp_dmatrix 1..4:/#.
+move => [#] ? ? h.
+rewrite size_tr.
+split.
++ rewrite eq_tuple_swap (size_dmatrix d r c) => /#.
++ move => i j [#]. rewrite rows_tr cols_tr trmxE => *.
+  apply (h j i) => /#.
+qed.
+
+hint exact: supp_dmatrix_tr.
+hint simplify supp_dmatrix_tr.
+
+lemma dfuni_matrix_tr1E m d r c: 0 <= r => 0 <= c =>
+    m \in dmatrix d r c =>
+    mu1 (dmatrix d r c) m = mu1 (dmatrix d c r) (trmx m).
+proof.
+move => *.
+have hr : rows m = r; 1: by apply (dmatrix_rows m d r c).
+have hc : cols m = c; 1: by apply (dmatrix_cols m d r).
+have hrt: rows (trmx m) = c; 1: by apply (dmatrix_rows_tr m d r c).
+have hct: cols (trmx m) = r; 1: by apply (dmatrix_cols_tr m d r c).
+rewrite -{1}hr -{1}hc -hrt -hct.
+rewrite !dmatrix1E hr hc hrt hct.
+rewrite /big !filter_predT.
+pose r' := range 0 r.
+pose c' := range 0 c.
+rewrite -!foldr_comp //=.
+have ->: (fun (i : int) => foldr Real.( * ) 1%r (map (fun (j : int) => mu1 d m.[i, j]) c'))
+       = (fun (i : int) => foldr (Real.( * ) \o fun (j : int) => mu1 d m.[i, j]) 1%r c').
++ by rewrite fun_ext /(==) => *; rewrite foldr_comp.
+have ->: (fun (i : int) => foldr Real.( * ) 1%r (map (fun (j : int) => mu1 d m.[j, i]) r'))
+       = (fun (i : int) => foldr (Real.( * ) \o fun (j : int) => mu1 d m.[j, i]) 1%r r').
++ by rewrite fun_ext /(==) => *; rewrite foldr_comp.
+
+elim r' => //=.
++ rewrite /(\o).
+  by elim c'.
++ move => x xs h.
+  rewrite {1}/(\o) h.
+  rewrite /(\o).
+  pose f x0 := foldr (fun (x1 : int) => ( * ) (mu1 d m.[x1, x0])) 1%r xs.
+  have -> : (fun x0 => Real.( * ) (foldr (fun (x1 : int) => Real.( * ) (mu1 d m.[x1, x0])) 1%r xs))
+       = (fun x0 => Real.( * ) (f x0)); 1: by trivial.
+  have -> : (fun x0 => Real.( * ) (mu1 d m.[x, x0] * foldr (fun x1 => Real.( * ) (mu1 d m.[x1, x0])) 1%r xs))
+       = (fun x0 => Real.( * ) (mu1 d m.[x, x0] * f x0)); 1: by trivial.
+  clear h; elim c' => //.
+  move => y ys //=.
+  pose t0 := foldr (fun (x0 : int) => ( * ) (mu1 d m.[x, x0])) 1%r ys.
+  pose t1 := foldr (fun (x0 : int) => ( * ) (f x0)) 1%r ys.
+  pose t2 := foldr (fun (x0 : int) => ( * ) (mu1 d m.[x, x0] * f x0)) 1%r ys.
+
+  by rewrite RField.mulrA -[_*t0*_]RField.mulrA [t0*f y]RField.mulrC RField.mulrA -[_ * t0 * t1]RField.mulrA /#.
+qed.
+
+lemma trmx_cancel m : trmx (trmx m) = m.
+proof. by rewrite trmxK. qed.
+
+hint exact: trmx_cancel.
+hint simplify trmx_cancel.
+
+lemma catmr_empty a b m n d: 0 <= m => 0 <= n => a \in dmatrix d m n => b \in dmatrix d m 0 => (a || b) = a.
+proof.
+move => *.
+rewrite /catmr.
+have h0 := dmatrix_rows a d m n _ _ _; 1..3: by trivial.
+have h1 := dmatrix_cols a d m n _ _ _; 1..3: by trivial.
+rewrite h0 h1.
+rewrite (dmatrix_rows b d m 0) //.
+rewrite (dmatrix_cols b d m 0) //.
+rewrite eq_sym eq_matrixP.
+split.
++ rewrite //= h0 h1 => /#.
++ move => i j h.
+  rewrite get_offunm => //=.
+  + rewrite /#.
+  + have -> : b.[i, j - n] = ZR.zeror.
+    + by apply getm0E => /#.
+  by rewrite ZR.addr0.
+qed.
+
 (* --------------- *)
 (* LWE adversaries *)
 (* --------------- *)
 op H : seed -> int -> int -> matrix.
+axiom H_mem: forall sd x y, H sd x y \in duni_matrix x y.
+
 op n : { int | 0 < n } as gt0_n.
 op nb : { int | 0 < nb } as gt0_nb.
 op mb : { int | 0 < mb } as gt0_mb.
 
 hint exact: gt0_n gt0_nb gt0_mb.
-
-lemma ge0_n: 0 <= n.
-proof. by apply ltrW. qed.
-
-lemma ge0_mb: 0 <= mb.
-proof. by apply ltrW. qed.
-
-lemma ge0_nb: 0 <= nb.
-proof. by apply ltrW. qed.
-
-hint exact: ge0_n ge0_nb ge0_mb.
-hint simplify (ge0_n,ge0_nb,ge0_mb).
-module type HAdv1_M = {
-   proc guess(sd : seed, u : matrix) : bool
-}.
-
-module type HAdv1_V = {
-   proc guess(sd : seed, u : vector) : bool
-}.
-
-module type Adv_T = {
-   proc guess(A : matrix, uvw : matrix * matrix * matrix) : bool
-}.
-
-module LWE(Adv : Adv_T) = {
-
-  proc main(b : bool) : bool = {
-    var b', _A, s, e, u0, u1, s', e', v0, v1, _B, e'', w0, w1;
-
-    _A <$ duni_matrix n n;
-    s <$ Chi_matrix n nb;
-    e <$ Chi_matrix n nb;
-    u0 <- _A * s + e;
-    u1 <$ duni_matrix n nb;
-
-    s' <$ Chi_matrix mb n;
-    e' <$ Chi_matrix mb n;
-    v0 <- s' * _A + e';
-    v1 <$ duni_matrix mb n;
-
-    _B <$ duni_matrix n nb;
-    e'' <$ Chi_matrix mb nb;
-    w0 <- s' * _B + e'';
-    w1 <$ duni_matrix mb nb;
-
-    b' <@ Adv.guess(_A, if b then (u1,v1,w1) else (u0,v0,w0));
-    return b';
-   }
-
-}.
+hint simplify (gt0_n, gt0_nb, gt0_mb).
 
 (* LWE adversary *)
-module LWE_H1(Adv : HAdv1_M) = {
-  var sd: seed
-
+module LWE_H1(Adv : Adv_M0) = {
   proc main(b : bool) : bool = {
-    var b', _A, s, e, u0, u1;
+    var b', sd, _A, s, e, u0, u1, u;
 
     sd <$ dseed;
     _A <- H sd n n;
@@ -593,36 +693,117 @@ module LWE_H1(Adv : HAdv1_M) = {
     e <$ Chi_matrix n nb;
     u0 <- _A * s + e;
     u1 <$ duni_matrix n nb;
+    u <- if b then u1 else u0;
 
-    b' <@ Adv.guess(sd, if b then u1 else u0);
+    b' <@ Adv.guess(sd, u);
     return b';
    }
 }.
 
-module type HAdv2_T = {
-   proc guess(sd : seed, _B : matrix, uv : matrix * matrix) : bool
+section.
+clone import LWE_Hybrid as LWE_Hyb1 with
+  op G <- fun sd m n => trmx (H sd m n),
+  op k <- 0,
+  op l <- nb,
+  op m <- n,
+  op n <- n
+  rename "G" as "H"
+  rename "l" as "nb"
+  proof * by done.
+
+module Adv_M_T(Adv: Adv_M) = {
+  proc guess(sd: seed, m0: matrix): bool = {
+    var b, _B;
+    _B <$ duni_matrix n 0;
+    m0 <- trmx m0;
+    b <@ Adv.guess(sd, _B, m0);
+    return b;
+  }
 }.
 
-module LWE_H2(Adv : HAdv2_T) = {
+lemma LWE_H1_Eq (A <: Adv_M{-LWE_M}) b &m:
+    Pr[LWE_H1(Adv_M_T(A)).main(b) @ &m: res] = Pr[LWE_M(A).main(b) @ &m: res].
+proof.
+byequiv => //.
+proc; inline *.
+swap {1} 10 -7; swap {1} 8 1; wp.
+call (:true) => /=; wp.
+rnd trmx trmx.
+wp.
+rnd trmx trmx.
+rnd trmx trmx.
+auto => //= />.
+move => sd ? _B ? *.
+split => *.
++ rewrite /Chi_matrix.
+  by apply (dfuni_matrix_tr1E _ _ nb n).
+split => *.
++ by rewrite supp_dmatrix_tr.
+split => *.
++ by rewrite supp_dmatrix_tr.
+move => *; split => *.
++ rewrite /duni_matrix. by apply (dfuni_matrix_tr1E _ duni_R nb n).
+split => *.
++ by rewrite supp_dmatrix_tr.
+have -> := (catmr_empty (trmx (H sd n n)) _B n n duni_R _ _ _ _); 1..2, 4: by trivial. by rewrite supp_dmatrix_tr // H_mem.
+case (b) => * //.
+qed.
 
+
+lemma LWE_H1_restr (A <: Adv_M{-Hyb.Count, -LWE_Ob, -LWE_M_Loop, -Hyb_Mock, -LWE_RO.RO, -LWE_RO.FRO, -LWE_V, -LWE_V_Aux, -LWE_M}) &m:
+    islossless A.guess =>
+    Pr[LWE_H1(Adv_M_T(A)).main(false) @ &m: res] - Pr[LWE_H1(Adv_M_T(A)).main(true) @ &m: res]
+  = nb%r * (Pr[LWE_V(Hyb_Mock(B(A))).main(false) @ &m : res] - Pr[LWE_V(Hyb_Mock(B(A))).main(true) @ &m : res]).
+proof.
+rewrite !(LWE_H1_Eq A).
+apply (LWE_H_Hybrid A).
+qed.
+
+end section.
+
+section.
+
+clone import LWE_Hybrid as LWE_Hyb2 with
+  op G <- H,
+  op k <- nb,
+  op l <- mb,
+  op m <- n,
+  op n <- n
+  rename "G" as "H"
+  rename "l" as "mb"
+  proof * by done.
+
+module LWE_H2(Adv : Adv_M) = {
   proc main(b : bool) : bool = {
-    var seed, b', _A, s', e', u0, u1, _B, e'', v0, v1;
+    var sd, b', _A, s', u0, u1, _B, e;
 
-    seed <$ dseed;
+    sd <$ dseed;
     _B <$ duni_matrix n nb;
     s' <$ Chi_matrix mb n;
-    e' <$ Chi_matrix mb n;
-    e'' <$ Chi_matrix mb nb;
+    e <$ Chi_matrix mb (n + nb);
 
-    _A <- H seed n n;
-    u0 <- s' * _A + e';
-    u1 <$ duni_matrix mb n;
+    _A <- H sd n n;
+    u0 <- s' * (_A || _B) + e;
+    u1 <$ duni_matrix mb (n + nb);
 
-    v0 <- s' * _B + e'';
-    v1 <$ duni_matrix mb nb;
-
-    b' <@ Adv.guess(seed, _B, if b then (u1, v1) else (u0, v0));
+    b' <@ Adv.guess(sd, _B, if b then u1 else u0);
     return b';
    }
-
 }.
+
+lemma LWE_H2_restr(A <: Adv_M{-Hyb.Count, -LWE_Ob, -LWE_M_Loop, -Hyb_Mock, -LWE_RO.RO, -LWE_RO.FRO, -LWE_V, -LWE_V_Aux, -LWE_M}) &m:
+    islossless A.guess =>
+    Pr[LWE_H2(A).main(false) @ &m: res] - Pr[LWE_H2(A).main(true) @ &m: res]
+  = mb%r * (Pr[LWE_V(Hyb_Mock(B(A))).main(false) @ &m : res] - Pr[LWE_V(Hyb_Mock(B(A))).main(true) @ &m : res]).
+proof.
+have h : forall b, Pr[LWE_H2(A).main(b) @ &m: res] = Pr[LWE_M(A).main(b) @ &m: res].
++ move => b.
+  byequiv => //.
+  proc; inline *; wp.
+  call (: true) => /=; wp.
+  rnd. auto.
+rewrite !h.
+apply (LWE_H_Hybrid A).
+qed.
+
+end section.
