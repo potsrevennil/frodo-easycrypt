@@ -153,3 +153,84 @@ rewrite dmatrixRSr1E //.
 rewrite !dprod1E -submT.
 rewrite dmatrix_tr1E //; 1: by rewrite size_tr rows_subm cols_subm /#.
 qed.
+
+lemma supp_dmatrix_dvector d m r c:
+    0 <= r
+    => 0 <= c
+    => m \in dmatrix d (r + 1) c <=> m \in dlet (dmatrix d r c) (fun m' => dmap (dvector d c) (fun v' => m' / rowmx v')).
+proof.
+move => ? ?.
+split.
++ rewrite (supp_dmatrix d m (r+1) c _ _) 1..2: /# => [#] *.
+  rewrite supp_dlet.
+  exists (subm m 0 r 0 c) => /=; split.
+  + rewrite supp_dmatrix // size_subm; split => [/# | i j [#]].
+    rewrite rows_subm cols_subm /= !lez_maxr // => *.
+    rewrite get_subm //= => /#.
+  + rewrite supp_dmap; exists (row m r).
+    rewrite (supp_dvector d (row m r)) // size_row.
+    split => [/# |/=].
+    rewrite rowmx_row_eq_subm -{1}(catmc_subm m r) /#.
++ rewrite supp_dmatrix 1..2:/#.
+  rewrite supp_dlet; case => m' [#] /=.
+  rewrite supp_dmatrix // supp_dmap => [#] hm'r hm'c ?. case => v' [#].
+  rewrite supp_dvector // => /= [#] hv'c ? h.
+  rewrite h rows_catmc cols_catmc rows_rowmx cols_rowmx.
+  split => [/#|i j /=].
+  rewrite hm'r hm'c hv'c lez_maxr // => [#] *.
+  rewrite get_catmc hm'r.
+  case (i = r) => [-> /=|*].
+  + rewrite getm0E 1:/#.
+    rewrite ZR.add0r => /#.
+  + have ->: (rowmx v').[i - r, j] = ZR.zeror; 1: by rewrite getm0E 1:/#.
+    rewrite ZR.addr0 => /#.
+qed.
+
+lemma dmatrix_dvector1E' d (m: matrix) r c:
+    0 <= r
+    => 0 <= c
+    => size m = (r + 1, c)
+    => mu1 (dmatrix d (r + 1) c) m = mu1 (dmap (dmatrix d r c `*` dvector d c) (fun (mv: matrix * vector) => mv.`1 / rowmx mv.`2)) m.
+proof.
+move => ? c_ge0 [#] hr hc.
+rewrite dmatrix_tr1E 1:/# //.
+rewrite dmatrixRSr1E //.
+rewrite !dprod1E -submT.
+rewrite -dmatrix_tr1E 1:/# //; 1: by rewrite rows_subm cols_subm /#.
+rewrite col_trmx.
+rewrite (in_dmap1E_can _ _ (fun m => (subm m 0 r 0 c, row m r))) => //=.
++ rewrite -{3}(catmc_subm m r) 1:/# hc hr.
+  by rewrite rowmx_row_eq_subm hc.
++ move => [#] mv /supp_dprod [#] ? ? h.
+  have : size mv.`1 = (r, c); 1: by apply (size_dmatrix d _ _ mv.`1).
+  move => [#] hmv1r hmv1c.
+  have : size mv.`2 = c; 1: by rewrite (size_dvector d c mv.`2 _) /#.
+  move => hmv2.
+  rewrite -{1}hmv1r -{1}hmv1c -h.
+  rewrite subm_catmcCl row_catmcR; 1..2: by rewrite ?cols_rowmx /#.
+  rewrite hmv1r => /#.
+by rewrite dprod1E.
+qed.
+
+lemma dlet_dprodE (d1 : 'a distr) (d2: 'b distr) (f: 'a * 'b -> 'c distr):
+    dlet (d1 `*` d2) f = dlet d1 (fun x => dlet d2 (fun y => f (x, y))).
+proof.
+rewrite dprod_dlet dlet_dlet.
+congr.
+rewrite fun_ext => x //=.
+rewrite dlet_dlet; congr.
+rewrite fun_ext => y /=.
+by rewrite dlet_unit.
+qed.
+
+lemma dlet_dprodE' (d1 : 'a distr) (d2: 'b distr) (f: 'a -> 'b -> 'c distr):
+    dlet (d1 `*` d2) (fun (xy: 'a * 'b) => f xy.`1 xy.`2) = dlet d1 (fun x => dlet d2 (fun y => f x y)).
+proof.
+by rewrite dlet_dprodE.
+qed.
+
+lemma dlet_dprodE_swap (d1 : 'a distr) (d2: 'b distr) (f: 'a * 'b -> 'c distr):
+    dlet (d1 `*` d2) f = dlet d2 (fun y => dlet d1 (fun x => f (x, y))).
+proof.
+by rewrite dlet_swap dlet_dprodE.
+qed.
