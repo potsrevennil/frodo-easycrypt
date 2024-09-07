@@ -1,5 +1,6 @@
 require import AllCore Distr List.
 require (****) DynMatrix.
+(*****) import DList.
 
 clone import DynMatrix as Matrix.
 export Matrix.
@@ -74,15 +75,13 @@ qed.
 hint exact: supp_dmatrix_tr.
 hint simplify supp_dmatrix_tr.
 
-lemma dfuni_matrix_tr1E m d r c: 0 <= r => 0 <= c =>
-    m \in dmatrix d r c =>
+lemma dmatrix_tr1E (m: matrix) d r c: 0 <= r => 0 <= c =>
+    size m = (r, c) =>
     mu1 (dmatrix d r c) m = mu1 (dmatrix d c r) (trmx m).
 proof.
-move => *.
-have hr : rows m = r; 1: by apply (dmatrix_rows m d r c).
-have hc : cols m = c; 1: by apply (dmatrix_cols m d r).
-have hrt: rows (trmx m) = c; 1: by apply (dmatrix_rows_tr m d r c).
-have hct: cols (trmx m) = r; 1: by apply (dmatrix_cols_tr m d r c).
+move => ? ? [#] hr hc *.
+have hrt: rows (trmx m) = c; 1: by rewrite rows_tr .
+have hct: cols (trmx m) = r; 1: by rewrite cols_tr.
 rewrite -{1}hr -{1}hc -hrt -hct.
 rewrite !dmatrix1E hr hc hrt hct.
 rewrite /big !filter_predT.
@@ -91,10 +90,10 @@ pose c' := range 0 c.
 rewrite -!foldr_comp //=.
 have ->: (fun (i : int) => foldr Real.( * ) 1%r (map (fun (j : int) => mu1 d m.[i, j]) c'))
        = (fun (i : int) => foldr (Real.( * ) \o fun (j : int) => mu1 d m.[i, j]) 1%r c').
-+ by rewrite fun_ext /(==) => *; rewrite foldr_comp.
++ by rewrite fun_ext => *; rewrite foldr_comp.
 have ->: (fun (i : int) => foldr Real.( * ) 1%r (map (fun (j : int) => mu1 d m.[j, i]) r'))
        = (fun (i : int) => foldr (Real.( * ) \o fun (j : int) => mu1 d m.[j, i]) 1%r r').
-+ by rewrite fun_ext /(==) => *; rewrite foldr_comp.
++ by rewrite fun_ext => *; rewrite foldr_comp.
 
 elim r' => //=.
 + rewrite /(\o).
@@ -140,4 +139,17 @@ split.
   + have -> : b.[i, j - n] = ZR.zeror.
     + by apply getm0E => /#.
   by rewrite ZR.addr0.
+qed.
+
+lemma dmatrix_dvector1E d (m: matrix) r c:
+    0 <= r
+    => 0 <= c
+    => size m = (r + 1, c)
+    => mu1 (dmatrix d (r + 1) c) m = mu1 (dmatrix d r c `*` dvector d c) (subm m 0 r 0 c, row m r).
+proof.
+move => ? ? [#] *.
+rewrite dmatrix_tr1E 1:/# //.
+rewrite dmatrixRSr1E //.
+rewrite !dprod1E -submT.
+rewrite dmatrix_tr1E //; 1: by rewrite size_tr rows_subm cols_subm /#.
 qed.
