@@ -15,16 +15,16 @@
         "stable": "stable"
       },
       "locked": {
-        "lastModified": 1720168760,
-        "narHash": "sha256-tSUBdZmNeB1tURt7fqeH/xKArumzsE14PwsI8beDlro=",
+        "lastModified": 1721742439,
+        "narHash": "sha256-PAZndZBfIJhikWFFYU+L/Ug/CiptbU2qyB39fdvXwgU=",
         "owner": "Easycrypt",
         "repo": "easycrypt",
-        "rev": "a9e31ff5f758ef62453d76de382a10ee718afc51",
+        "rev": "4d79300df74984f206b69dfc50cf628ef7e914c1",
         "type": "github"
       },
       "original": {
         "owner": "Easycrypt",
-        "ref": "a9e31ff5f758ef62453d76de382a10ee718afc51",
+        "ref": "4d79300df74984f206b69dfc50cf628ef7e914c1",
         "repo": "easycrypt",
         "type": "github"
       }

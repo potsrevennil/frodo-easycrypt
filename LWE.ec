@@ -581,17 +581,13 @@ rnd trmx trmx.
 rnd trmx trmx.
 auto => //= />.
 move => sd ? _B ? *.
-split => *.
-+ rewrite /Chi_matrix.
-  by apply (dfuni_matrix_tr1E _ _ nb n).
-split => *.
-+ by rewrite supp_dmatrix_tr.
-split => *.
-+ by rewrite supp_dmatrix_tr.
-move => *; split => *.
-+ rewrite /duni_matrix. by apply (dfuni_matrix_tr1E _ duni_R nb n).
-split => *.
-+ by rewrite supp_dmatrix_tr.
+split => [sR *|*].
++ by rewrite /Chi_matrix (dmatrix_tr1E _ _ nb n) // (size_dmatrix Chi nb n sR).
+rewrite supp_dmatrix_tr => /> *.
+rewrite supp_dmatrix_tr => /> *.
+split => [uR *| *].
++ by rewrite /duni_matrix; apply (dmatrix_tr1E _ duni_R nb n) => //; rewrite (size_dmatrix duni_R nb n uR).
+rewrite supp_dmatrix_tr => />.
 have -> := (catmr_empty (trmx (H sd n n)) _B n n duni_R _ _ _ _); 1..2, 4: by trivial. by rewrite supp_dmatrix_tr // H_mem.
 case (b) => * //.
 qed.
