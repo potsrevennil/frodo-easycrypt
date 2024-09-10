@@ -72,15 +72,20 @@ proof.
 by rewrite (dlistS1E d x []) dlist0 // dunit1xx.
 qed.
     
-abstract theory Sample.
+abstract theory SampleL.
 type t.
 
-clone import Program as Program_ with
-    type t <- t
-    proof *.
+module List = {
+  proc sample(d, n): t list = {
+      var r;
 
-module SampleRcons = {
-  proc sample(n: int): t list = {
+      r <$ dlist d n;
+      return r;
+  }
+}.
+
+module Rcons = {
+  proc sample(d, n): t list = {
     var r, rs, rs';
     rs <$ dlist d (n - 1);
     r <$ d;
@@ -90,7 +95,7 @@ module SampleRcons = {
 }.
 
 module LoopRcons = {
-  proc sample(n : int) : t list = {
+  proc sample(d, n) : t list = {
     var i : int;
     var r : t;
     var l : t list;
@@ -107,8 +112,8 @@ module LoopRcons = {
   }
 }.
 
-lemma Sample_SampleRcons_eq:
-    equiv[ Sample.sample ~ SampleRcons.sample : 0 < n{1} /\ ={n} ==> ={res} ].
+lemma List_Rcons_eq:
+    equiv[ List.sample ~ Rcons.sample : 0 < n{1} /\ ={d, n} ==> ={res} ].
 proof.
 bypr res{1} res{2} => //= &1 &2 l *.
 byequiv => //.
@@ -119,41 +124,43 @@ rewrite -(dmap_dprodE _ _ (fun (rsr: t list * t) => rcons rsr.`1 rsr.`2)).
 rewrite !dlist_djoin 1..2:/# -!djoin_rcons -!nseqSr 1:/# => /#.
 qed.
 
-lemma Sample_LoopRcons_eq:
-    equiv[ Sample.sample ~ LoopRcons.sample : ={n} ==> ={res} ].
+lemma List_LoopRcons_eq:
+    equiv[ List.sample ~ LoopRcons.sample : ={d, n} ==> ={res} ].
 proof.
 exists* n{1}; elim*.
 elim /natind => [_n ?|_n].
-+ proc*;inline *;rcondf{2} 4; auto; smt(weight_dlist0 supp_dlist0).
++ proc*; inline *. rcondf{2} 5; auto; smt(weight_dlist0 supp_dlist0).
 + case (_n = 0) => [hn ? ?|? ? h].
   + proc;inline *. rcondt{2} 3; 1: by auto => /#.
     rcondf{2} 6; 1: by auto => /#.
-    wp; rnd (head witness) (fun x => [x]); auto => />.
-    rewrite hn /=; split => [*|? l hl].
+    wp; rnd (head witness) (fun x => [x]); auto => /> *.
+    rewrite hn /=. split => [*|? l hl].
     + by rewrite dlist_singleton1E. 
-    + rewrite (supp_dlist d 1 l) // in hl.
-      case hl => hl.
-      rewrite size_eq1 in hl.
-      elim hl => x ->.
+    + rewrite (supp_dlist _ 1 l) // in hl.
+      case hl => hl; rewrite size_eq1 in hl; elim hl => x ->.
       by rewrite head_cons.
-  + transitivity SampleRcons.sample
-                 (0 < n{1} /\ ={n} ==> ={res})
-                 (_n + 1 = n{1} /\ ={n} /\ 0 < n{1} ==> ={res}); 1..2: by rewrite /#.
-    + by conseq Sample_SampleRcons_eq.
+  + transitivity Rcons.sample
+                 (0 < n{1} /\ ={d, n} ==> ={res})
+                 (_n + 1 = n{1} /\ ={d, n} /\ 0 < n{1} ==> ={res}); 1..2: by rewrite /#.
+    + exact List_Rcons_eq.
     + proc; splitwhile{2} 3: (i < n - 1).
       rcondt{2} 4; 1: by auto; while (i < n); auto => /#.
-      rcondf{2} 7; 1: by auto; while (i < n); auto => /#.
+      rcondf{2} 7; 1: auto. while (i < n); auto => /#.
       wp; rnd.
-      outline {1} [1] rs <@ Sample.sample.
+      outline {1} [1] rs <@ List.sample.
       rewrite equiv[{1} 1 h]; inline.
-      by wp; while (={i,l} /\ n0{1} = n{2} - 1); auto => /#.
+      by wp; while (={i,d,l} /\ n0{1} = n{2} - 1 /\ d0{1} = d{1}); auto => /#.
 qed.    
+end SampleL.
 
-module type Sample = {
-  proc sample(d: t distr, r: int, c: int): matrix
-}.
+abstract theory SampleM.
+type t.
 
-module SampleMatrix = {
+clone import SampleL with
+    type t <- vector
+    proof *.
+
+module Matrix = {
   proc sample(d, r, c): matrix = {
     var m;
     m <$ dmatrix d r c;
@@ -161,19 +168,30 @@ module SampleMatrix = {
   }
 }.
 
-module SampleList = {
+module VectorRows = {
   proc sample(d, r, c): matrix = {
     var vs, m;
-    vs <$ dlist (dvector d c) r;
+    vs <@ SampleL.List.sample(dvector d c, r);
     m <- trmx (ofcols c r vs);
 
     return m;
   }
 }.
 
-lemma SampleMatrix_SampleList_eq :
-    equiv[ SampleMatrix.sample ~ SampleList.sample : 0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res} ].
-proof.
+module VectorRowsLoopRcons = {
+  proc sample(d, r, c): matrix = {
+    var vs, m;
+
+    vs <@ SampleL.LoopRcons.sample(dvector d c, r);
+    m <- trmx (ofcols c r vs);
+
+    return m;
+  }
+}.
+
+lemma Matrix_VectorRows_eq :
+    equiv[ Matrix.sample ~ VectorRows.sample : 0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res} ].
+
 bypr (res{1}) (res{2}) => //= &1 &2 m [#] *.
 byequiv => //.
 proc; inline *.
@@ -182,4 +200,27 @@ auto => //= />.
 by rewrite dmatrix_rows /#.
 qed.
 
-end Sample.
+lemma VectorRows_VectorRowsLoopRcons_eq :
+    equiv [ VectorRows.sample ~ VectorRowsLoopRcons.sample :
+        0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res} ].
+proof.
+bypr res{1} res{2} => // &1 &2 m [#] ? ? <- <- <-.
+byequiv => //.
+proc; wp.
+rewrite equiv[{1} 1 List_LoopRcons_eq].
+call (_: true) => /=.
++ while (={d, l, i,  n}); auto => />.
++ skip => //=.
+qed.
+
+lemma Matrix_VectorRowsLoopRcons_eq:
+    equiv[ Matrix.sample ~ VectorRowsLoopRcons.sample: 0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res} ].
+proof.
+transitivity VectorRows.sample
+    (0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res})
+    (0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res}) => //; 1: by rewrite /#.
++ exact  Matrix_VectorRows_eq.
++ exact VectorRows_VectorRowsLoopRcons_eq.
+qed.
+
+end SampleM.
