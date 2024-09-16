@@ -71,7 +71,7 @@ lemma dlist_singleton1E d (x: 'a) :
 proof.
 by rewrite (dlistS1E d x []) dlist0 // dunit1xx.
 qed.
-    
+
 lemma subm_catmc m (r: int, r1: int ,r2:int, c1:int , c2: int):
     0 <= r1 => 0 <= r2 => 
     subm m r (r+r1) c1 c2 / subm m (r+r1) (r+r1+r2) c1 c2 =
@@ -88,6 +88,24 @@ case (i < r1) => *.
   by rewrite !get_subm 1..4:/# ZR.addr0.
 + rewrite getm0E 1:/#.
   rewrite !get_subm 1..4:/# ZR.add0r => /#.
+qed.
+
+lemma subm_catmr m (r1: int, r2: int, c: int, c1: int, c2: int):
+    0 <= c1 => 0 <= c2 =>
+    (subm m r1 r2 c (c+c1) || subm m r1 r2 (c+c1) (c+c1+c2)) =
+    subm m r1 r2 c (c+c1+c2).
+proof.
+move => *.
+have -> : m = trmx (trmx m); 1: by trivial.
+rewrite -!submT -catmcT.
+congr.
+by rewrite !submT subm_catmc.
+qed.
+
+lemma col_mul_eq m1 m2 i: m1 *^ col m2 i = col (m1 * m2) i.
+proof.
+rewrite eq_vectorP size_col size_mulmxv rows_mulmx /= => j [#] *.
+by rewrite get_mulmxv get_mulmx.
 qed.
 
 lemma row_mul_eq m1 m2 i: row m1 i ^* m2 = row (m1 * m2) i.
@@ -276,64 +294,52 @@ transitivity VectorRows.sample
 qed.
 
 module Matrix' = {
-  proc id(m): matrix = {
-    return m;
+  proc matrix_mul_add (m1, m2: matrix, m3): matrix = {
+    return m1 * m2 + m3;
   }
 
-  proc matrix_mul (m1, m2: matrix): matrix = {
-    return m1 * m2;
-  }
-
-  proc vector_mul (m1, m2): matrix = {
-    var i, v, vs, m;
+  proc vector_mul_matrix_add (m1, m2, m3): matrix = {
+    var i, v, vs;
     i <- 0;
     vs <- [];
 
-    while (i < rows m1) {
-        v <- row m1 i ^* m2;
+    while (i < max (rows m1) (rows m3)) {
+        v <- row m1 i ^* m2 + row m3 i;
         vs <- rcons vs v;
         i <- i + 1;
     }
 
-    m <- trmx (ofcols (cols m2) (rows m1) vs);
-
-    return m;
+    return trmx (ofcols (max (cols m2) (cols m3)) (max (rows m1) (rows m3)) vs);
   }
 }.
 
-lemma matrix_mul_eq:
-    equiv[ Matrix'.matrix_mul ~ Matrix'.vector_mul: ={m1, m2} ==> ={res} ].
+import StdOrder.IntOrder.
+lemma matrix_mul_add_eq:
+    equiv[ Matrix'.matrix_mul_add ~ Matrix'.vector_mul_matrix_add: ={m1, m2, m3} ==> ={res} ].
 proof.
-bypr res{1} res{2} => // &1 &2 m' [#] -> ->.
+bypr res{1} res{2} => // &1 &2 m' [#] -> -> ->.
 byequiv => //.
-proc; inline *; wp.
+proc; inline *.
 while{2} (
-  ={m1, m2} /\
+  ={m1, m2, m3} /\
   0 <= i{2} /\
   size vs{2} = i{2} /\
-  i{2} <= rows m1{2} /\
-  subm (m1{1} * m2{1}) 0 i{2} 0 (cols m2{1}) = trmx (ofcols (cols m2{2}) i{2} vs{2})
+  i{2} <= max (rows m1{2}) (rows m3{2}) /\
+  subm (m1{1} * m2{1} + m3{1}) 0 i{2} 0 (max (cols m2{1}) (cols m3{1})) = trmx (ofcols (max (cols m2{2}) (cols m3{2})) i{2} vs{2})
 )
-(rows m1{2} - i{2}).
-+ move => &l z.
-  auto => //= &r [#] -> -> ? ? ? h ? ? />.
-  rewrite size_rcons.
-  + rewrite rcons_catmr //; 1: by rewrite size_mulvmx.
-    rewrite catmrT -h trmx_colmx.
-    rewrite row_mul_eq rowmx_row_eq_subm cols_mulmx.
-    rewrite (subm_catmc _ 0 i{r} 1 _ _) //.
-    rewrite /#.
-+ auto => //= &l &r [#] /> *.
-  split.
-  + rewrite rows_ge0 /=.
-    rewrite eq_matrixP size_subm size_tr cols_offunm rows_offunm /= => i j [#] *.
+(max (rows m1{2}) (rows m3{2}) - i{2}).
++ auto => /> &r ? ? h ?.
+  rewrite size_rcons => />.
+  rewrite rcons_catmc 1,3://; 1: by rewrite size_addv size_mulvmx size_row.
+  rewrite row_mul_eq -rowD rowmx_row_eq_subm cols_addm cols_mulmx -h.
+  rewrite (subm_catmc _ 0 (size vs{r}) 1 _ _) /#.
++ auto => />.
+  split => [|vs]; [split|split => [/#|*]]. 
+  + by rewrite (ler_trans (rows m1{2}) _ _) 1:rows_ge0 1:maxrl.
+  + rewrite eq_matrixP size_subm cols_offunm rows_offunm /= => ? ? [#] *.
     by rewrite !getm0E 1..2:/#.
-  + move => vs.
-    split.
-    + rewrite /#.
-    + move => ? ? ? .
-      have -> : size vs = rows m1{2}; 1: by rewrite /#.
-      have [#] <- <- := size_mulmx m1{2} m2{2}.
-      by rewrite subm_id => /#.
+  + rewrite -[m1{2}*_+_]subm_id rows_addm rows_mulmx cols_addm cols_mulmx.
+    have <- /#: size vs = max (rows m1{2}) (rows m3{2}); 1: by rewrite /#.
 qed.
+
 end SampleM.
