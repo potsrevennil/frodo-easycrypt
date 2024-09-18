@@ -1,6 +1,7 @@
 require import AllCore Distr List.
 require import Distrmatrix.
 require import DList.
+import StdOrder.IntOrder.
 (*****) import DM.
 
 export DM.
@@ -236,6 +237,32 @@ module Matrix = {
     m <$ dmatrix d r c;
     return m;
   }
+
+  proc sample'(d, r, b): matrix = {
+    var a, c, m;
+    a <$ dmatrix d r (rows b);
+    c <$ dmatrix d r (cols b);
+    m <- a * b + c;
+    return m;
+  }
+
+  proc matrix_mul_add (m1, m2: matrix, m3): matrix = {
+    return m1 * m2 + m3;
+  }
+
+  proc vector_mul_matrix_add (m1, m2, m3): matrix = {
+    var i, v, vs;
+    i <- 0;
+    vs <- [];
+
+    while (i < max (rows m1) (rows m3)) {
+        v <- row m1 i ^* m2 + row m3 i;
+        vs <- rcons vs v;
+        i <- i + 1;
+    }
+
+    return trmx (ofcols (max (cols m2) (cols m3)) (max (rows m1) (rows m3)) vs);
+  }
 }.
 
 module VectorRows = {
@@ -257,6 +284,32 @@ module VectorRowsLoopRcons = {
 
     return m;
   }
+
+  proc sample'(d, r, b): matrix = {
+    var i, vs, v, a, c;
+
+    i <- 0;
+    vs <- [];
+    while (i < r) {
+      a <$ dvector d (rows b);
+      c <$ dvector d (cols b);
+
+      v <- a ^* b + c;
+      vs <- rcons vs v;
+
+      i <- i + 1;
+    }
+
+    return trmx (ofcols (cols b) r vs);
+  }
+
+  proc sample'aux(d, r, b): matrix = {
+    var d', vs, m;
+    d' <- dlet (dvector d (rows b)) (fun a => dmap (dvector d (cols b)) (fun c => a ^* b + c));
+    vs <@ SampleL.LoopRcons.sample(d', r);
+    m <- trmx (ofcols (cols b) r vs);
+    return m;
+  }
 }.
 
 lemma Matrix_VectorRows_eq :
@@ -266,7 +319,7 @@ bypr (res{1}) (res{2}) => //= &1 &2 m [#] *.
 byequiv => //.
 proc; inline *.
 rndsem*{2} 0.
-auto => //= />.
+auto => />.
 by rewrite dmatrix_rows /#.
 qed.
 
@@ -293,29 +346,10 @@ transitivity VectorRows.sample
 + exact VectorRows_VectorRowsLoopRcons_eq.
 qed.
 
-module Matrix' = {
-  proc matrix_mul_add (m1, m2: matrix, m3): matrix = {
-    return m1 * m2 + m3;
-  }
-
-  proc vector_mul_matrix_add (m1, m2, m3): matrix = {
-    var i, v, vs;
-    i <- 0;
-    vs <- [];
-
-    while (i < max (rows m1) (rows m3)) {
-        v <- row m1 i ^* m2 + row m3 i;
-        vs <- rcons vs v;
-        i <- i + 1;
-    }
-
-    return trmx (ofcols (max (cols m2) (cols m3)) (max (rows m1) (rows m3)) vs);
-  }
-}.
 
 import StdOrder.IntOrder.
 lemma matrix_mul_add_eq:
-    equiv[ Matrix'.matrix_mul_add ~ Matrix'.vector_mul_matrix_add: ={m1, m2, m3} ==> ={res} ].
+    equiv[ Matrix.matrix_mul_add ~ Matrix.vector_mul_matrix_add: ={m1, m2, m3} ==> ={res} ].
 proof.
 bypr res{1} res{2} => // &1 &2 m' [#] -> -> ->.
 byequiv => //.
