@@ -144,6 +144,59 @@ move => *.
 by rewrite rcons_catmr.
 qed.
 
+lemma cons_catmr (vs: vector list) (v: vector) l:
+    0 <= l =>
+    ofcols l (size (v:: vs)) (v :: vs) = (ofcols l 1 [v] || ofcols l (size vs) vs).
+proof.
+move => *.
+rewrite eq_matrixP size_catmr !rows_offunm !cols_offunm => />.
+split => [| i j *].
++ rewrite !lez_maxr 1:addr_ge0 2,4:size_ge0 1..3:/#.
++ rewrite get_catmr get_offunm 1:/# /=.
+  case (j = 0) => *.
+  + rewrite get_offunm 1:/#.
+    rewrite getm0E; 1: by rewrite rows_offunm cols_offunm => /#.
+    rewrite ZR.addr0 /=. by subst j.
+  + rewrite getm0E; 1: by rewrite rows_offunm cols_offunm => /#.
+    rewrite ZR.add0r cols_offunm get_offunm => /#.
+qed.
+
+lemma ofcols_zerom r : ofcols r 0 [] = zerom r 0.
+proof.
+rewrite eq_matrixP => /> i j.
+rewrite rows_offunm cols_offunm => /#.
+qed.
+
+lemma foo m (vs: vector list):
+    m * ofcols (cols m) (size vs) vs = ofcols (rows m) (size vs) (map (fun v => m *^ v) vs).
+proof.
+elim vs.
++ rewrite /= !ofcols_zerom eq_matrixP size_mulmx cols_matrixc size_matrixc => /#.
++ move => v vs h.
+  rewrite map_cons /= cons_catmr 1:cols_ge0.
+  have -> : 1 + size vs = size ((m *^ v) :: map (fun v0 => m *^ v0) vs).
+      by rewrite /= size_map.
+  rewrite (cons_catmr _ _ (rows m)) 1:rows_ge0.
+  rewrite catmrDr size_map -h.
+  have -> //= : m * ofcols (cols m) 1 [v] = ofcols (rows m) 1 [m *^ v].
+  + rewrite eq_matrixP size_mulmx !cols_offunm rows_offunm => /> i j.
+    rewrite cols_offunm => *.
+    have -> : j = 0; 1: by rewrite /#.
+    rewrite get_offunm 1:/# /=.
+    rewrite get_mulmx get_mulmxv.
+    congr.
+
+admit.
+qed.
+
+lemma dmatrix_mul_eq d l m:
+    0 <= l =>
+    dmap (dmatrix d l (rows m)) (fun m1 => m1 * m) =
+    dmap (dlist (dmap (dvector d (rows m)) (fun v => v ^* m)) l) (fun vs => trmx (ofcols (cols m) l vs)).
+proof.
+admit.
+qed.
+
 abstract theory SampleL.
 type t.
 
