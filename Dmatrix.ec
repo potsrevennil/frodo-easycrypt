@@ -144,6 +144,28 @@ move => *.
 by rewrite rcons_catmr.
 qed.
 
+lemma ofcols_colmx m r:
+    rows m = r =>
+    cols m = 1 =>
+    ofcols r 1 [col m 0] = m.
+proof.
+move => <- h.
+rewrite eq_matrixP /ofcols h => /> i j *.
+have -> : j = 0; 1: by rewrite /#.
+rewrite get_offunm /#.
+qed.
+
+lemma ofcols_rowmx m c:
+    rows m = 1 =>
+    cols m = c =>
+    trmx (ofcols c 1 [row m 0]) = m.
+proof.
+move => h <-.
+rewrite eq_matrixP /ofcols h => /> i j *.
+have -> : i = 0; 1: by rewrite /#.
+rewrite get_offunm /#.
+qed.
+
 lemma cons_catmr (vs: vector list) (v: vector) l:
     0 <= l =>
     ofcols l (size (v:: vs)) (v :: vs) = (ofcols l 1 [v] || ofcols l (size vs) vs).
@@ -165,6 +187,48 @@ lemma ofcols_zerom r : ofcols r 0 [] = zerom r 0.
 proof.
 rewrite eq_matrixP => /> i j.
 rewrite rows_offunm cols_offunm => /#.
+qed.
+
+lemma ofcols_zerom_tr r : trmx (ofcols r 0 []) = zerom 0 r.
+proof.
+by rewrite ofcols_zerom trmx_matrixc.
+qed.
+
+import StdBigop.Bigreal.BRM.
+lemma dmatrixr01E d c m:
+    0 <= c =>
+    mu1 (dmatrix d 0 c) (subm m 0 0 0 c) = 1%r.
+proof.
+move => *.
+have := (dmatrix1E d (subm m 0 0 0 c)).
+rewrite rows_subm cols_subm /= !lez_maxr //.
+by rewrite big_geq.
+qed.
+
+lemma drowmx1E d c (v: vector):
+    0 <= c =>
+    size v = c =>
+    mu1 (dvector d c) v = mu1 (dmatrix d 1 c) (rowmx v).
+proof.
+move => *.
+rewrite (dmatrix_dvector1E _ _ 0 _) // dprod1E rowK.
+by rewrite dmatrixr01E.
+qed.
+
+lemma supp_drow d c m:
+    0 <= c =>
+    m \in dmatrix d 1 c => row m 0 \in dvector d c.
+proof.
+move => ?.
+rewrite supp_dmatrix // supp_dvector => /#.
+qed.
+
+lemma supp_dmatrixr0 m d c: 0 <= c => m \in dmatrix d 0 c <=> m = zerom 0 c.
+proof.
+move => *.
+rewrite supp_dmatrix 1, 2://.
+split => [[#] *|-> /#].
++ rewrite eq_matrixP => /#.
 qed.
 
 lemma foo m (vs: vector list):
@@ -339,7 +403,7 @@ module VectorRowsLoopRcons = {
   }
 
   proc sample'(d, r, b): matrix = {
-    var i, vs, v, a, c;
+    var i, vs, v, a, c, m;
 
     i <- 0;
     vs <- [];
@@ -353,13 +417,6 @@ module VectorRowsLoopRcons = {
       i <- i + 1;
     }
 
-    return trmx (ofcols (cols b) r vs);
-  }
-
-  proc sample'aux(d, r, b): matrix = {
-    var d', vs, m;
-    d' <- dlet (dvector d (rows b)) (fun a => dmap (dvector d (cols b)) (fun c => a ^* b + c));
-    vs <@ SampleL.LoopRcons.sample(d', r);
     m <- trmx (ofcols (cols b) r vs);
     return m;
   }
@@ -399,6 +456,37 @@ transitivity VectorRows.sample
 + exact VectorRows_VectorRowsLoopRcons_eq.
 qed.
 
+lemma Matrix_VectorRowsLoopRcons_eq':
+    equiv[ Matrix.sample' ~ VectorRowsLoopRcons.sample': 0 <= r{1} /\ ={d, r, b} ==> ={res} ].
+proof.
+exists* r{1}; elim*.
+elim /natind => [_r ?|_r].
++ proc; inline *; rcondf{2} 3; auto => [/# | /> *].
+  smt(weight_dlist0 dmap_ll dlist_ll supp_dmatrixr0 rows_ge0 cols_ge0 mul0m lin_addm0 rows_matrixc cols_matrixc ofcols_zerom_tr).
++ case (_r = 0) => [*|? ? h].
+  + proc;inline *; rcondt{2} 3; 1: by auto => /#.
+    rcondf{2} 8; 1: by auto => /#.
+    swap {2} 7 1; swap {2} 1 6; wp.
+    do 2! rnd (fun m => row m 0) rowmx.
+    auto => />.
+    subst _r => /> &2.
+    split => [*|*].
+    + smt(drowmx1E size_dvector).
+    + split => *.
+      + smt(supp_drow).
+      + split => *.
+        + smt(rowmx_row supp_dmatrix).
+        + split => *.
+          + smt(drowmx1E size_dvector).
+          + split => *.
+            + smt(supp_drow).
+            + split => *.
+              + smt(rowmx_row supp_dmatrix).
+              + rewrite row_mul_eq -rowD ofcols_rowmx //=.
+                + smt(rows_addm rows_mulmx size_dmatrix).
+                + smt(cols_addm cols_mulmx size_dmatrix).
+admit.
+qed.
 
 import StdOrder.IntOrder.
 lemma matrix_mul_add_eq:
