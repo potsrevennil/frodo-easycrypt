@@ -8,6 +8,9 @@ require (****) Dmatrix.
 
 clone import Dmatrix as Dmatrix_.
 
+clone import SampleLWE.
+clone import SampleM.
+
 instance ring with R
   op rzero = ZR.zeror
   op rone  = ZR.oner
@@ -101,14 +104,16 @@ module type Adv_V = {
 theory LWE_Hybrid.
 
 op G : seed -> int -> int -> matrix.
+axiom G_rows : forall sd m n, rows (G sd m n) = m. 
+axiom G_cols : forall sd m n, cols (G sd m n) = n. 
 
 op k : { int | 0 <= k } as ge0_k.
 op l : { int | 0 < l } as gt0_l.
 op m: { int | 0 < m } as gt0_m.
 op n : { int | 0 < n } as gt0_n.
 
-hint exact: gt0_m gt0_n gt0_l ge0_k.
-hint simplify (gt0_m, gt0_n, gt0_l, ge0_k).
+hint exact: gt0_m gt0_n gt0_l ge0_k G_rows G_cols.
+hint simplify (gt0_m, gt0_n, gt0_l, ge0_k, G_rows, G_cols).
 
 module LWE_M(Adv: Adv_M) = {
   var sd: seed
@@ -120,10 +125,10 @@ module LWE_M(Adv: Adv_M) = {
     _A <- G sd m n;
     _B <$ duni_matrix m k;
 
-    s <$ Chi_matrix l m;
-    e <$ Chi_matrix l (n + k);
+    s <$ dmatrix Chi l m;
+    e <$ dmatrix Chi l (n+k);
     u0 <- s * (_A || _B) + e;
-    u1 <$ duni_matrix l (n + k);
+    u1 <$ dmatrix duni_R l (n+k);
 
     b' <@ Adv.guess(sd, _B, if b then u1 else u0);
     return b';
@@ -149,9 +154,9 @@ module LWE_M_Loop(Adv: Adv_M) = {
         sc <$ dvector Chi m;
         ec <$ dvector Chi (n + k);
         u0c <- sc ^* (_A || _B) + ec;
-        u1c <$ dvector duni_R (n + k);
-
         u0cs <- rcons u0cs u0c;
+
+        u1c <$ dvector duni_R (n + k);
         u1cs <- rcons u1cs u1c;
 
         i <- i + 1;
@@ -186,10 +191,33 @@ module LWE_V(Adv: Adv_V) = {
    }
 }.
 
-lemma LWE_M_Eq (A <: Adv_M) b &m:
+lemma LWE_M_Loop_Eq (A <: Adv_M{-LWE_M, -LWE_M_Loop}) b &m:
     Pr[LWE_M(A).main(b) @ &m: res] = Pr[LWE_M_Loop(A).main(b) @ &m: res].
 proof.
-admit.
+byequiv => //.
+proc.
+fission{2} 7!1 @ 4,6.
+swap{2} 10 -2; swap{2} 5 4.
+outline{2} [4-7] u0 <@ SampleLWE.LWE_M_Loop.sampleG.
+outline{2} [5-8] u1 <@ SampleM.VectorRowsLoopRcons.sample.
+rewrite equiv[{2} 4 -SampleLWE.LWE_M_Loop_eqG].
+rewrite equiv[{2} 5 -SampleM.Matrix_VectorRowsLoopRcons_eq].
+inline *;
+call (:LWE_M.sd{1} = LWE_M_Loop.sd{2}).
+do 3! cfold{2} 13; wp; rnd.
+swap{2} 6 4; do 4! cfold{2} 4; wp; auto.
++ inline *. auto => /> *. apply addr_ge0 => //.
++ auto => /> *. rewrite rows_catmr cols_catmr /=. smt(size_dmatrix gt0_m ge0_k).
++ call (:true); inline{1} 5.
+  do 3! cfold{1} 5; wp; while (i0{1} = i{2} /\ vs{1} = u1cs{2}); auto => />. smt().
+  call (:true). wp. while (={d,x,y,i,r,vs,b}); auto => />. 
+  auto => />.
++ inline *; do 2! cfold {1} 4; do 2! cfold{1} 5; wp.
+  call (:true); wp.
+  while (={i,u1cs}).
+  + sim.
+  + wp; while (={_A,_B} /\ i0{1} = i{2} /\ vs{1} = u0cs{2} /\ b0{1} = (_A{1} || _B{1}));
+    auto => />.
 qed.
 
 (* --------------------------------------------------------------------------- *)
@@ -485,13 +513,13 @@ case (x.`3) => h //.
 by rewrite dlet_ll // => *; rewrite dmap_ll.
 qed.
 
-lemma LWE_H_Hybrid (A <: Adv_M{-Count, -LWE_Ob, -LWE_M_Loop, -Hyb_Mock, -LWE_RO.RO, -LWE_RO.FRO, -LWE_V, -LWE_V_Aux}) &m :
+lemma LWE_H_Hybrid (A <: Adv_M{-Count, -LWE_Ob, -LWE_M, -LWE_M_Loop, -Hyb_Mock, -LWE_RO.RO, -LWE_RO.FRO, -LWE_V, -LWE_V_Aux}) &m :
     islossless A.guess =>
     Pr[LWE_M(A).main(false) @ &m : res] - Pr[LWE_M(A).main(true) @ &m : res]
   = l%r * (Pr[LWE_V(Hyb_Mock(B(A))).main(false) @ &m : res] - Pr[LWE_V(Hyb_Mock(B(A))).main(true) @ &m : res]).
 proof.
 move => A_ll.
-rewrite !(LWE_M_Eq A).
+rewrite !(LWE_M_Loop_Eq A).
 rewrite (LWE_M_L A) (LWE_M_R A) (LWE_V_L A) (LWE_V_R A).
 apply (Hybrid_restr LWE_Ob (B(A)) _ _ _ _ _ &m (fun _ _ _ r => r)).
 move => *.
@@ -521,13 +549,15 @@ end LWE_Hybrid.
 (* --------------- *)
 op H : seed -> int -> int -> matrix.
 axiom H_mem: forall sd x y, H sd x y \in duni_matrix x y.
+axiom H_rows sd m n:  rows (H sd m n) = m.
+axiom H_cols sd m n:  cols (H sd m n) = n.
 
 op n : { int | 0 < n } as gt0_n.
 op nb : { int | 0 < nb } as gt0_nb.
 op mb : { int | 0 < mb } as gt0_mb.
 
-hint exact: gt0_n gt0_nb gt0_mb.
-hint simplify (gt0_n, gt0_nb, gt0_mb).
+hint exact: H_rows H_cols gt0_n gt0_nb gt0_mb.
+hint simplify (H_rows, H_cols, gt0_n, gt0_nb, gt0_mb).
 
 (* LWE adversary *)
 module LWE_H1(Adv : Adv_M0) = {
@@ -549,14 +579,12 @@ module LWE_H1(Adv : Adv_M0) = {
 
 section.
 clone import LWE_Hybrid as LWE_Hyb1 with
-  op G <- fun sd m n => trmx (H sd m n),
+  op G <- fun sd m n => trmx (H sd n m),
   op k <- 0,
   op l <- nb,
   op m <- n,
   op n <- n
-  rename "G" as "H"
-  rename "l" as "nb"
-  proof * by done.
+  proof * by smt(rows_tr cols_tr).
 
 module Adv_M_T(Adv: Adv_M) = {
   proc guess(sd: seed, m0: matrix): bool = {
@@ -591,7 +619,6 @@ rewrite supp_dmatrix_tr => />.
 have -> := (catmr_empty (trmx (H sd n n)) _B n n duni_R _ _ _ _); 1..2, 4: by trivial. by rewrite supp_dmatrix_tr // H_mem.
 case (b) => * //.
 qed.
-
 
 lemma LWE_H1_restr (A <: Adv_M{-Hyb.Count, -LWE_Ob, -LWE_M_Loop, -Hyb_Mock, -LWE_RO.RO, -LWE_RO.FRO, -LWE_V, -LWE_V_Aux, -LWE_M}) &m:
     islossless A.guess =>
