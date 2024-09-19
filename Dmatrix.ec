@@ -383,8 +383,12 @@ module Matrix = {
 }.
 
 module VectorRows = {
+  var vs: vector list
+  var l: int
+
   proc sample(d, r, c): matrix = {
-    var vs, m;
+    var m;
+    l <- c;
     vs <@ SampleL.List.sample(dvector d c, r);
     m <- trmx (ofcols c r vs);
 
@@ -393,8 +397,12 @@ module VectorRows = {
 }.
 
 module VectorRowsLoopRcons = {
+  var vs: vector list
+  var l: int
+
   proc sample(d, r, c): matrix = {
-    var vs, m;
+    var m;
+    l <- c;
 
     vs <@ SampleL.LoopRcons.sample(dvector d c, r);
     m <- trmx (ofcols c r vs);
@@ -423,35 +431,69 @@ module VectorRowsLoopRcons = {
 }.
 
 lemma Matrix_VectorRows_eq :
-    equiv[ Matrix.sample ~ VectorRows.sample : 0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res} ].
-
-bypr (res{1}) (res{2}) => //= &1 &2 m [#] *.
-byequiv => //.
-proc; inline *.
+equiv[ Matrix.sample ~ VectorRows.sample :
+    0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==>
+      ={res} /\
+        all (fun (v: vector) => size v = VectorRows.l{2}) VectorRows.vs{2}
+].
+proof.
+proc. inline sample. sp.
 rndsem*{2} 0.
-auto => />.
-by rewrite dmatrix_rows /#.
+rnd (fun m => (map (row m) (range 0 r{1}), m)) snd => />.
++ move => //= &1 &2 [#] * /#. 
++ auto => /> &2 *.
+  split => [mvs h|*].
+  + rewrite supp_dmap in h.
+    case h => vs [#] h -> /=.
+    have ? : size vs = r{2}; 1: by rewrite (supp_dlist_size _ _ _ _ h).
+    apply (eq_from_nth witness).
+    + rewrite size_map size_range /#.
+    + move => i [#] *.
+      rewrite (nth_map witness witness) 1:size_range 1:/#.
+      rewrite (nth_iota _ _ _ witness) 1:/# /=.
+      admit.
+  split => [mvs h|? m *].
+  + admit.
+  split => *.
+  + admit.
+  + admit.
 qed.
 
 lemma VectorRows_VectorRowsLoopRcons_eq :
-    equiv [ VectorRows.sample ~ VectorRowsLoopRcons.sample :
-        0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res} ].
+equiv [ VectorRows.sample ~ VectorRowsLoopRcons.sample :
+    0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==>
+      ={res} /\
+        all (fun (v: vector) => size v = VectorRowsLoopRcons.l{2}) VectorRowsLoopRcons.vs{2}
+].
 proof.
-bypr res{1} res{2} => // &1 &2 m [#] ? ? <- <- <-.
-byequiv => //.
-proc; wp.
-rewrite equiv[{1} 1 List_LoopRcons_eq].
-call (_: true) => /=.
-+ while (={d, l, i,  n}); auto => />.
-+ skip => //=.
+proc. wp.
+rewrite equiv[{1} 2 List_LoopRcons_eq].
+inline sample; wp.
++ while (={d0, l, i, n}
+  /\ d0{2} = dvector d{2} c{2}
+  /\ VectorRowsLoopRcons.l{2} = c{2}
+  /\ 0 <= c{2}
+  /\ all (fun (v: vector) => size v = VectorRowsLoopRcons.l{2}) l{2}
+); auto => /> &2 ? ? ? ?.
+by rewrite all_rcons supp_dvector.
 qed.
 
 lemma Matrix_VectorRowsLoopRcons_eq:
-    equiv[ Matrix.sample ~ VectorRowsLoopRcons.sample: 0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res} ].
+equiv[ Matrix.sample ~ VectorRowsLoopRcons.sample:
+    0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==>
+      ={res} /\
+        all (fun (v: vector) => size v = VectorRowsLoopRcons.l{2}) VectorRowsLoopRcons.vs{2}
+].
 proof.
 transitivity VectorRows.sample
-    (0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res})
-    (0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==> ={res}) => //; 1: by rewrite /#.
+    (0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==>
+      ={res} /\
+        all (fun (v: vector) => size v = VectorRows.l{2}) VectorRows.vs{2}
+    )
+    (0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==>
+      ={res} /\
+        all (fun (v: vector) => size v = VectorRowsLoopRcons.l{2}) VectorRowsLoopRcons.vs{2}
+    ) => //; 1: by rewrite /#.
 + exact  Matrix_VectorRows_eq.
 + exact VectorRows_VectorRowsLoopRcons_eq.
 qed.
