@@ -1,0 +1,99 @@
+\documentclass[conference,compsoc]{IEEEtran}
+
+\usepackage[nocompress]{cite}
+\usepackage[pdftex]{graphicx}
+\usepackage{amsmath}
+\usepackage{algorithmic}
+\usepackage{array}
+\usepackage[caption=false,font=footnotesize,labelfont=sf,textfont=sf]{subfig}
+\usepackage{stfloats}
+\usepackage{url}
+\usepackage{todonotes}
+
+\hyphenation{for-mo-sa}
+
+\begin{document}
+
+\title{Formally Verified Correctness Bounds for Lattice-Based Cryptography}
+
+% % author names and affiliations
+% % use a multiple column layout for up to three different
+% % affiliations
+\author{\IEEEauthorblockN{EC Frodo KEM Team}
+  \IEEEauthorblockA{Formosa Crypto + CQT}}
+% \and
+% \IEEEauthorblockN{Homer Simpson}
+% \IEEEauthorblockA{Twentieth Century Fox\\
+% Springfield, USA\\
+% Email: homer@thesimpsons.com}
+% \and
+% \IEEEauthorblockN{James Kirk\\ and Montgomery Scott}
+% \IEEEauthorblockA{Starfleet Academy\\
+% San Francisco, California 96678-2391\\
+% Telephone: (800) 555--1212\\
+% Fax: (888) 555--1212}}
+
+% conference papers do not typically use \thanks and this command
+% is locked out in conference mode. If really needed, such as for
+% the acknowledgment of grants, issue a \IEEEoverridecommandlockouts
+% after \documentclass
+
+% for over three affiliations, or if they all won't fit within the width
+% of the page (and note that there is less available width in this regard for
+% compsoc conferences compared to traditional conferences), use this
+% alternative format:
+% 
+%\author{\IEEEauthorblockN{Michael Shell\IEEEauthorrefmark{1},
+%Homer Simpson\IEEEauthorrefmark{2},
+%James Kirk\IEEEauthorrefmark{3}, 
+%Montgomery Scott\IEEEauthorrefmark{3} and
+%Eldon Tyrell\IEEEauthorrefmark{4}}
+%\IEEEauthorblockA{\IEEEauthorrefmark{1}School of Electrical and Computer Engineering\\
+%Georgia Institute of Technology,
+%Atlanta, Georgia 30332--0250\\ Email: see http://www.michaelshell.org/contact.html}
+%\IEEEauthorblockA{\IEEEauthorrefmark{2}Twentieth Century Fox, Springfield, USA\\
+%Email: homer@thesimpsons.com}
+%\IEEEauthorblockA{\IEEEauthorrefmark{3}Starfleet Academy, San Francisco, California 96678-2391\\
+%Telephone: (800) 555--1212, Fax: (888) 555--1212}
+%\IEEEauthorblockA{\IEEEauthorrefmark{4}Tyrell Inc., 123 Replicant Street, Los Angeles, California 90210--4321}}
+
+% make the title area
+\maketitle
+
+\begin{abstract}
+The abstract goes here.
+\end{abstract}
+
+\IEEEpeerreviewmaketitle
+
+
+
+\section{Introduction}
+
+Story
+\begin{itemize}
+\item Lattice-based crypto security and correctnes proofs have been formally verified
+\item Correctness bounds are still estimated heuristically and/or using non-verified code
+\item Mention the famous python script and tell its story
+\item We give the first fully verified proof that bounds reported for PQ constructions, namely PQ KEM are correct
+\item We develop an EasyCrypt extension that allows to compute formally verified upper bounds for the probabilities of events over the reals
+\item We give a new proof of correctness and security for the PKE underlying Frodo-KEM and demonstrate our approach to give a concrete bound for the it's cryptographic correctness that confirms the bounds claimed in the NIST submission
+\item We also confirm the (heuristic) bounds claimed by Kyber and Saber.
+\end{itemize}
+
+\section{Preliminaries}
+
+\section{Correctness in Lattice-Based PKEs}
+
+\section{Computing formally-verified upper-bounds in EasyCrypt}
+
+\section{Frodo KEM PKE}
+
+\section{Other lattice-based constructions}
+
+\section{Conclusions and future work}
+
+\bibliographystyle{IEEEtran}
+\bibliography{local.bib}
+
+\end{document}
