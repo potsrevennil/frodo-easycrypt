@@ -355,14 +355,6 @@ module Matrix = {
     return m;
   }
 
-  proc sample'(d, r, b): matrix = {
-    var a, c, m;
-    a <$ dmatrix d r (rows b);
-    c <$ dmatrix d r (cols b);
-    m <- a * b + c;
-    return m;
-  }
-
   proc matrix_mul_add (m1, m2: matrix, m3): matrix = {
     return m1 * m2 + m3;
   }
@@ -407,25 +399,6 @@ module VectorRowsLoopRcons = {
     vs <@ SampleL.LoopRcons.sample(dvector d c, r);
     m <- trmx (ofcols c r vs);
 
-    return m;
-  }
-
-  proc sample'(d, r, b): matrix = {
-    var i, vs, v, a, c, m;
-
-    i <- 0;
-    vs <- [];
-    while (i < r) {
-      a <$ dvector d (rows b);
-      c <$ dvector d (cols b);
-
-      v <- a ^* b + c;
-      vs <- rcons vs v;
-
-      i <- i + 1;
-    }
-
-    m <- trmx (ofcols (cols b) r vs);
     return m;
   }
 }.
@@ -498,38 +471,6 @@ transitivity VectorRows.sample
 + exact VectorRows_VectorRowsLoopRcons_eq.
 qed.
 
-lemma Matrix_VectorRowsLoopRcons_eq':
-    equiv[ Matrix.sample' ~ VectorRowsLoopRcons.sample': 0 <= r{1} /\ ={d, r, b} ==> ={res} ].
-proof.
-exists* r{1}; elim*.
-elim /natind => [_r ?|_r].
-+ proc; inline *; rcondf{2} 3; auto => [/# | /> *].
-  smt(weight_dlist0 dmap_ll dlist_ll supp_dmatrixr0 rows_ge0 cols_ge0 mul0m lin_addm0 rows_matrixc cols_matrixc ofcols_zerom_tr).
-+ case (_r = 0) => [*|? ? h].
-  + proc;inline *; rcondt{2} 3; 1: by auto => /#.
-    rcondf{2} 8; 1: by auto => /#.
-    swap {2} 7 1; swap {2} 1 6; wp.
-    do 2! rnd (fun m => row m 0) rowmx.
-    auto => />.
-    subst _r => /> &2.
-    split => [*|*].
-    + smt(drowmx1E size_dvector).
-    + split => *.
-      + smt(supp_drow).
-      + split => *.
-        + smt(rowmx_row supp_dmatrix).
-        + split => *.
-          + smt(drowmx1E size_dvector).
-          + split => *.
-            + smt(supp_drow).
-            + split => *.
-              + smt(rowmx_row supp_dmatrix).
-              + rewrite row_mul_eq -rowD ofcols_rowmx //=.
-                + smt(rows_addm rows_mulmx size_dmatrix).
-                + smt(cols_addm cols_mulmx size_dmatrix).
-admit.
-qed.
-
 import StdOrder.IntOrder.
 lemma matrix_mul_add_eq:
     equiv[ Matrix.matrix_mul_add ~ Matrix.vector_mul_matrix_add: ={m1, m2, m3} ==> ={res} ].
@@ -557,6 +498,80 @@ while{2} (
     by rewrite !getm0E 1..2:/#.
   + rewrite -[m1{2}*_+_]subm_id rows_addm rows_mulmx cols_addm cols_mulmx.
     have <- /#: size vs = max (rows m1{2}) (rows m3{2}); 1: by rewrite /#.
+qed.
+
+module LWE_M = {
+  proc sample(d, r, b): matrix = {
+    var a, c, m;
+    a <$ dmatrix d r (rows b);
+    c <$ dmatrix d r (cols b);
+    m <- a * b + c;
+    return m;
+  }
+}.
+
+module LWE_M_Loop = {
+  var vs: vector list
+  var l: int
+
+  proc sample(d, r, b): matrix = {
+    var i, v, a, c, m;
+
+    l <- cols b;
+    vs <- [];
+    i <- 0;
+    while (i < r) {
+      a <$ dvector d (rows b);
+      c <$ dvector d (cols b);
+
+      v <- a ^* b + c;
+      vs <- rcons vs v;
+
+      i <- i + 1;
+    }
+
+    m <- trmx (ofcols (cols b) r vs);
+    return m;
+  }
+}.
+
+
+lemma dmatrixr0_ll d c: 0 <= c => is_lossless (dmatrix d 0 c).
+proof.
+move => *.
+by rewrite dmatrix_rows // dmap_ll /is_lossless weight_dlist0.
+qed.
+
+lemma LWE_M_Loop_eq:
+    equiv[ LWE_M.sample ~ LWE_M_Loop.sample: 0 <= r{1} /\ ={d, r, b} ==> ={res} ].
+proof.
+exists* r{1}; elim*.
+elim /natind => [_r ?|_r].
++ proc; inline *; rcondf{2} 4; auto => [/# | /> *].
+  smt(weight_dlist0 dmap_ll dlist_ll supp_dmatrixr0 rows_ge0 cols_ge0 mul0m lin_addm0 rows_matrixc cols_matrixc ofcols_zerom_tr).
++ case (_r = 0) => [*|? ? h].
+  + proc;inline *; rcondt{2} 4; 1: by auto => /#.
+    rcondf{2} 9; 1: by auto => /#.
+    swap {2} 8 1; swap {2} 1 7; wp.
+    do 2! rnd (fun m => row m 0) rowmx.
+    auto => />.
+    subst _r => /> &2.
+    split => [*|*].
+    + smt(drowmx1E size_dvector).
+    + split => *.
+      + smt(supp_drow).
+      + split => *.
+        + smt(rowmx_row supp_dmatrix).
+        + split => *.
+          + smt(drowmx1E size_dvector).
+          + split => *.
+            + smt(supp_drow).
+            + split => *.
+              + smt(rowmx_row supp_dmatrix).
+              + rewrite row_mul_eq -rowD ofcols_rowmx //=.
+                + smt(rows_addm rows_mulmx size_dmatrix).
+                + smt(cols_addm cols_mulmx size_dmatrix).
+admit.
 qed.
 
 end SampleM.
