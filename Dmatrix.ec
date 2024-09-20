@@ -259,41 +259,63 @@ lemma dmatrix_mul_eq d l m:
     dmap (dlist (dmap (dvector d (rows m)) (fun v => v ^* m)) l) (fun vs => trmx (ofcols (cols m) l vs)).
 proof.
 admit.
+(*
+rewrite fun_ext => vs'.
+pose vs := map oflist _.
+rewrite -map_comp /(\o) /=.
+rewrite eq_matrixP.
+rewrite size_mulmx size_tr rows_tr !cols_offunm rows_offunm => /> i j.
+rewrite cols_offunm => *.
+rewrite get_offunm 1:/# => /=. 
+rewrite -(nth_tolist witness). 
+rewrite (nth_map witness witness).
+
+rewrite get_mulmx row_trmx.
+rewrite get_offunm 1:/# => /=.
+  *)
+
+qed.
+
+lemma all_rcons['a] (p: 'a -> bool) (ys: 'a list) y:
+    all p (rcons ys y) <=> all p ys /\ p y.
+proof.
+by rewrite -all_rev rev_rcons /= all_rev. 
 qed.
 
 abstract theory SampleL.
-type t.
+type in_t.
+type out_t.
 
 module List = {
-  proc sample(d, n): t list = {
+  proc sample(d: in_t distr, n, f): out_t list = {
       var r;
 
       r <$ dlist d n;
-      return r;
+      return map f r;
   }
 }.
 
 module Rcons = {
-  proc sample(d, n): t list = {
+  proc sample(d: in_t distr, n, f): out_t list = {
     var r, rs, rs';
     rs <$ dlist d (n - 1);
     r <$ d;
-    rs' <- rcons rs r;
+    rs' <- rcons (map f rs) (f r);
     return rs';
   }
 }.
 
 module LoopRcons = {
-  proc sample(d, n) : t list = {
+  proc sample(d, n, f) : out_t list = {
     var i : int;
-    var r : t;
-    var l : t list;
+    var r : in_t;
+    var l : out_t list;
     
     i <- 0;
     l <- [];
     while (i < n){
       r <$ d;
-      l <- rcons l r;
+      l <- rcons l (f r);
       i <- i + 1;
     }
     
@@ -301,24 +323,79 @@ module LoopRcons = {
   }
 }.
 
-lemma List_Rcons_eq:
-    equiv[ List.sample ~ Rcons.sample : 0 < n{1} /\ ={d, n} ==> ={res} ].
+lemma tuple_eq ['a 'b] (xy: 'a * 'b) : xy = (xy.`1, xy.`2).
 proof.
-bypr res{1} res{2} => //= &1 &2 l *.
+rewrite /#.
+qed.
+
+lemma dlistSr1E ['a] (d: 'a distr) xs x:
+    mu1 (dlist d (size (rcons xs x))) (rcons xs x) =
+    mu1 (dlist d (size xs)) xs * mu1 d x.
+proof.
+by rewrite !dlist1E 1,2:size_ge0 size_rcons /= big_rcons.
+qed.
+
+lemma size_behead ['a] (xs: 'a list):
+   0 < size xs =>
+   size (behead xs) = size xs - 1.
+proof.
+rewrite /#.
+qed.
+
+lemma all_behead ['a] (xs: 'a list) p:
+    all p xs => all p (behead xs).
+proof. rewrite /#. qed.
+
+abbrev belast' ['a] (xs: 'a list) = rev (behead (rev xs)).
+
+lemma size_belast' (xs: 'a list): 0 < size xs => size (belast' xs) = size xs - 1.
+proof.
+smt(size_rev).
+qed.
+
+lemma belast'_rcons xs (x: 'a):
+   belast' (rcons xs x) = xs.
+proof.
+by rewrite rev_rcons /= revK.
+qed.
+
+lemma rcons_belast' (xs: 'a list):
+    0 < size xs =>
+    rcons (belast' xs) (last witness xs) = xs.
+proof.
+smt(revK rev_cons last_rcons).
+qed.
+
+lemma List_Rcons_eq:
+    equiv[ List.sample ~ Rcons.sample : 0 < n{1} /\ ={d, n, f} ==> ={res} ].
+proof.
+bypr res{1} res{2} => //= &1 &2 l [#] *.
 byequiv => //.
-proc; inline *.
+proc; inline *; wp.
 rndsem*{2} 0.
-auto => //= />.
-rewrite -(dmap_dprodE _ _ (fun (rsr: t list * t) => rcons rsr.`1 rsr.`2)).
-rewrite !dlist_djoin 1..2:/# -!djoin_rcons -!nseqSr 1:/# => /#.
+rnd (fun (r: in_t list) => (belast' r, last witness r))
+    (fun (rsr: in_t list * in_t) => rcons rsr.`1 rsr.`2).
+auto => />.
+split => *.
++ rewrite rev_rcons behead_cons revK last_rcons => /#.
+split => [rsr h|? rs h].
++ have ? : size rsr.`1 = n{1} - 1.
+  + smt (supp_dlet supp_dmap size_rcons supp_dlist_size).
+  have -> : n{1} = size (rcons rsr.`1 rsr.`2).
+  + smt (supp_dlet supp_dmap size_rcons supp_dlist_size).
+  rewrite -dprod_dlet tuple_eq /= dprod1E dlistSr1E /#.
+split.
++ rewrite -dprod_dlet supp_dprod /=. 
+  smt(supp_dlist rcons_belast' all_rcons size_belast' last_rcons).
++ smt(dprod_dlet rcons_belast' supp_dlist map_rcons rcons_belast').
 qed.
 
 lemma List_LoopRcons_eq:
-    equiv[ List.sample ~ LoopRcons.sample : ={d, n} ==> ={res} ].
+    equiv[ List.sample ~ LoopRcons.sample : ={d, n, f} ==> ={res} ].
 proof.
 exists* n{1}; elim*.
 elim /natind => [_n ?|_n].
-+ proc*; inline *. rcondf{2} 5; auto; smt(weight_dlist0 supp_dlist0).
++ proc*; inline *. rcondf{2} 6; auto; smt(weight_dlist0 supp_dlist0).
 + case (_n = 0) => [hn ? ?|? ? h].
   + proc;inline *. rcondt{2} 3; 1: by auto => /#.
     rcondf{2} 6; 1: by auto => /#.
@@ -329,14 +406,18 @@ elim /natind => [_n ?|_n].
       case hl => hl; rewrite size_eq1 in hl; elim hl => x ->.
       by rewrite head_cons.
   + transitivity Rcons.sample
-                 (0 < n{1} /\ ={d, n} ==> ={res})
-                 (_n + 1 = n{1} /\ ={d, n} /\ 0 < n{1} ==> ={res}); 1..2: by rewrite /#.
+                 (0 < n{1} /\ ={d, n, f} ==> ={res})
+                 (_n + 1 = n{1} /\ ={d, n, f} /\ 0 < n{1} ==> ={res}); 1..2: by rewrite /#.
     + exact List_Rcons_eq.
     + proc; splitwhile{2} 3: (i < n - 1).
       rcondt{2} 4; 1: by auto; while (i < n); auto => /#.
-      rcondf{2} 7; 1: auto. while (i < n); auto => /#.
-      wp; rnd.
-      outline {1} [1] rs <@ List.sample.
+      rcondf{2} 7; 1: by auto; while (i < n); auto => /#.
+      wp. rnd. auto => /= />.
+      + smt().
+      while{2} (true) (n{2} - 1 - i{2}). 
+      + auto => /> *.
+
+      outline {2} [1-3] l <@ LoopRcons.sample.
       rewrite equiv[{1} 1 h]; inline.
       by wp; while (={i,d,l} /\ n0{1} = n{2} - 1 /\ d0{1} = d{1}); auto => /#.
 qed.    
