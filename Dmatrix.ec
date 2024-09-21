@@ -253,27 +253,61 @@ elim vs.
 admit.
 qed.
 
-lemma dmatrix_mul_eq d l m:
-    0 <= l =>
-    dmap (dmatrix d l (rows m)) (fun m1 => m1 * m) =
-    dmap (dlist (dmap (dvector d (rows m)) (fun v => v ^* m)) l) (fun vs => trmx (ofcols (cols m) l vs)).
+lemma dlist_dprod1E (d1: 'a distr) (d2: 'b distr) (xs: ('a*'b) list) n:
+    0 <= n =>
+    mu1 (dlist (d1 `*` d2) n) xs = mu1 (dlist d1 n `*` dlist d2 n) (unzip1 xs, unzip2 xs).
 proof.
+move => *.
+rewrite dprod1E !dlist1E // !size_map //=.
+case (n = size xs) => // *.
+have -> : (fun (x: 'a * 'b) => mu1 (d1 `*` d2) x)
+      = (fun (x: 'a * 'b) => mu1 d1 x.`1 * mu1 d2 x.`2);
+  1: by smt(dprod1E).
+rewrite big_split /big.
+by rewrite !filter_map -!map_comp /preim /(\o) /=.
+qed.
+
+lemma dlist_dprodE (d1: 'a distr) (d2: 'b distr) n:
+    0 <= n =>
+    dlist (d1 `*` d2) n
+  = dmap (dlist d1 n `*` dlist d2 n) (fun (abs: 'a list * 'b list) => zip abs.`1 abs.`2).
+proof.
+move => *.
+rewrite eq_distr => abs'.
+rewrite (in_dmap1E_can _ _ (fun (abs: ('a * 'b) list) => (unzip1 abs, unzip2 abs))) /=.
++ by rewrite zip_unzip.
++ move => ?.
+  rewrite supp_dprod !supp_dlist // => [#] *.
+  subst abs'.
+  rewrite unzip1_zip 1:/# unzip2_zip 1:/# => /#.
+by rewrite dlist_dprod1E.
+qed.
+
+lemma dmatrix_mul_eq d r b m:
+    0 <= r =>
+    m \in dmap (dlist (dvector d (rows b) `*` dvector d (cols b)) r)
+      (fun (acs: (vector * vector) list) =>
+        trmx
+          (ofcols (cols b) r
+            (map (fun (ac: vector * vector) => ac.`1 ^* b + ac.`2) acs))
+      ) =>
+    mu1 (dmap (dlist (dvector d (rows b) `*` dvector d (cols b)) r)
+      (fun (acs: (vector * vector) list) =>
+        trmx
+          (ofcols (cols b) r
+            (map (fun (ac: vector * vector) => ac.`1 ^* b + ac.`2) acs))
+      )) m
+  = mu1 (dmap (dmatrix d r (rows b) `*` dmatrix d r (cols b))
+      (fun (ac: matrix * matrix) => ac.`1 * b + ac.`2)) m.
+proof.
+move => ?.
+rewrite supp_dmap; case => acs' [#] /= *.
+rewrite !dmatrix_rows 1:rows_ge0 // 1:cols_ge0 //.
+rewrite (dmap_dprod (dlist _ r)) dmap_comp /(\o) /=.
+rewrite dlist_dprodE // dmap_comp /(\o) /=.
+congr; congr.
+rewrite fun_ext; case => a c /=.
 admit.
-(*
-rewrite fun_ext => vs'.
-pose vs := map oflist _.
-rewrite -map_comp /(\o) /=.
-rewrite eq_matrixP.
-rewrite size_mulmx size_tr rows_tr !cols_offunm rows_offunm => /> i j.
-rewrite cols_offunm => *.
-rewrite get_offunm 1:/# => /=. 
-rewrite -(nth_tolist witness). 
-rewrite (nth_map witness witness).
-
-rewrite get_mulmx row_trmx.
-rewrite get_offunm 1:/# => /=.
-  *)
-
 qed.
 
 lemma all_rcons['a] (p: 'a -> bool) (ys: 'a list) y:
