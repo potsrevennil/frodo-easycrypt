@@ -331,10 +331,11 @@ module List = {
 
 module Rcons = {
   proc sample(d: in_t distr, n, f): out_t list = {
-    var r, rs, rs';
+    var r, rs, rsf, rs';
     rs <$ dlist d (n - 1);
+    rsf <- map f rs;
     r <$ d;
-    rs' <- rcons (map f rs) (f r);
+    rs' <- rcons rsf (f r);
     return rs';
   }
 }.
@@ -405,7 +406,7 @@ lemma List_Rcons_eq:
 proof.
 bypr res{1} res{2} => //= &1 &2 l [#] *.
 byequiv => //.
-proc; inline *; wp.
+proc; inline *. swap{2} 2 1; wp. 
 rndsem*{2} 0.
 rnd (fun (r: in_t list) => (belast' r, last witness r))
     (fun (rsr: in_t list * in_t) => rcons rsr.`1 rsr.`2).
@@ -446,21 +447,19 @@ elim /natind => [_n ?|_n].
     + proc; splitwhile{2} 3: (i < n - 1).
       rcondt{2} 4; 1: by auto; while (i < n); auto => /#.
       rcondf{2} 7; 1: by auto; while (i < n); auto => /#.
-      wp. rnd. auto => /= />.
-      + smt().
-      while{2} (true) (n{2} - 1 - i{2}). 
-      + auto => /> *.
-
-      outline {2} [1-3] l <@ LoopRcons.sample.
-      rewrite equiv[{1} 1 h]; inline.
-      by wp; while (={i,d,l} /\ n0{1} = n{2} - 1 /\ d0{1} = d{1}); auto => /#.
+      wp. rnd. 
+      outline{1} [1-2] <@ List.sample.
+      rewrite equiv[{1} 1 h]; inline; wp.
+      while (={i,d,l,f} /\ n0{1} = n{2} - 1 /\ d0{1} = d{1} /\ f0{1} = f{1});
+      auto => /#.
 qed.    
 end SampleL.
 
 abstract theory SampleM.
 
 clone import SampleL with
-    type t <- vector
+    type in_t <- vector,
+    type out_t <- vector
     proof *.
 
 module Matrix = {
@@ -496,7 +495,7 @@ module VectorRows = {
   proc sample(d, r, c): matrix = {
     var m;
     l <- c;
-    vs <@ SampleL.List.sample(dvector d c, r);
+    vs <@ SampleL.List.sample(dvector d c, r, idfun);
     m <- trmx (ofcols c r vs);
 
     return m;
@@ -511,13 +510,14 @@ module VectorRowsLoopRcons = {
     var m;
     l <- c;
 
-    vs <@ SampleL.LoopRcons.sample(dvector d c, r);
+    vs <@ SampleL.LoopRcons.sample(dvector d c, r, idfun);
     m <- trmx (ofcols c r vs);
 
     return m;
   }
 }.
 
+(*
 lemma Matrix_VectorRows_eq :
 equiv[ Matrix.sample ~ VectorRows.sample :
     0 <= r{1} /\ 0 <= c{1} /\ ={d, r, c} ==>
@@ -614,6 +614,15 @@ while{2} (
   + rewrite -[m1{2}*_+_]subm_id rows_addm rows_mulmx cols_addm cols_mulmx.
     have <- /#: size vs = max (rows m1{2}) (rows m3{2}); 1: by rewrite /#.
 qed.
+*)
+end SampleM.
+
+abstract theory SampleLWE.
+
+clone import SampleL with
+    type in_t <- vector*vector,
+    type out_t <- vector
+    proof *.
 
 module LWE_M = {
   proc sample(d, r, b): matrix = {
@@ -648,6 +657,18 @@ module LWE_M_Loop = {
     m <- trmx (ofcols (cols b) r vs);
     return m;
   }
+
+  proc sample'(d, r, b): matrix = {
+    var m;
+
+    l <- cols b;
+    vs <@ LoopRcons.sample(dvector d (rows b) `*` dvector d (cols b), r,
+      fun (ac: vector * vector) => ac.`1 ^* b + ac.`2);
+
+    m <- trmx (ofcols (cols b) r vs);
+    return m;
+
+  }
 }.
 
 
@@ -655,6 +676,18 @@ lemma dmatrixr0_ll d c: 0 <= c => is_lossless (dmatrix d 0 c).
 proof.
 move => *.
 by rewrite dmatrix_rows // dmap_ll /is_lossless weight_dlist0.
+qed.
+
+lemma LWE_M_Loop_eq:
+    equiv[ LWE_M.sample ~ LWE_M_Loop.sample': 0 <= r{1} /\ ={d, r, b} ==> ={res} ].
+proof.
+proc. rewrite equiv[{2} 2 -List_LoopRcons_eq].
+inline *.
+rndsem*{2} 0.
+rndsem*{1} 0.
+rnd.
+auto => /> &2 *.
+split => *.
 qed.
 
 lemma LWE_M_Loop_eq:
