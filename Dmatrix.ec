@@ -5,13 +5,15 @@ import StdOrder.IntOrder.
 (*****) import DM.
 
 export DM.
-(*clone import DynMatrix as Matrix.*)
-(*export Matrix.*)
 
-(*
-op "_.[_<-_]" (m: matrix) (ij: int*int) (v: R): matrix =
-   offunm (fun i j => if (i,j) = ij then v else m.[ij],rows m, cols m).
-*)
+lemma max_eq x: max x x = x.
+proof. done. qed.
+
+lemma min_eq x: min x x = x.
+proof. done. qed.
+
+hint simplify (max_eq,min_eq).
+
 
 lemma supp_dmatrix_tr m d r c: 0 <= r => 0 <= c =>
     m \in dmatrix d r c =>
@@ -283,7 +285,77 @@ rewrite (in_dmap1E_can _ _ (fun (abs: ('a * 'b) list) => (unzip1 abs, unzip2 abs
 by rewrite dlist_dprod1E.
 qed.
 
-lemma dmatrix_mul_eq d r b m:
+lemma mulvmx_add_eq r b (vs: (vector * vector) list):
+    0 <= r =>
+    size vs = r =>
+    all (fun (ac: vector * vector) => size ac.`1 = rows b) vs =>
+    trmx (ofcols (rows b) r (unzip1 vs)) * b + trmx (ofcols (cols b) r (unzip2 vs))
+  = trmx (ofcols (cols b) r (map (fun (ac: vector * vector) => ac.`1 ^* b + ac.`2) vs)).
+proof.
+move => *.
+rewrite eq_matrixP size_addm size_mulmx size_tr rows_tr rows_offunm cols_offunm => /> i j.
+rewrite rows_addm cols_addm rows_mulmx cols_mulmx !rows_tr cols_tr rows_offunm !cols_offunm /= => *.
+rewrite get_addm get_mulmx trmxE /=.
+rewrite !get_offunm 1,2:/# /=.
+rewrite !(nth_map witness) 1,2:/# /=.
+rewrite get_addv get_mulvmx.
+rewrite col_ofcols 1:rows_ge0 // 2:size_map 1..2:/#.
++ by rewrite all_map.
+by rewrite (nth_map witness) 1:/#.
+qed.
+
+lemma trmx_eq m1 m2: trmx m1 = trmx m2 <=> m1 = m2.
+proof.
+split => [h|-> //].
+by rewrite -trmxK h trmxK.
+qed.
+
+lemma all_support_dprod d1 d2 xs:
+    all (support (d1 `*` d2)) xs = (all (fun (x: 'a * 'b) => x.`1 \in d1) xs /\ all (fun (x: 'a * 'b) => x.`2 \in d2) xs).
+proof.
+rewrite -all_predI.
+smt(supp_dprod).
+qed.
+
+lemma dmulvmx1E d r b m:
+    0 <= r =>
+    m \in dmap (dlist (dvector d (rows b)) r)
+      (fun (va: vector list) =>
+        trmx
+          (ofcols (cols b) r
+            (map (fun (a: vector) => a ^* b) va))
+      ) =>
+    mu1 (dmap (dlist (dvector d (rows b)) r)
+      (fun (va: vector list) =>
+        trmx
+          (ofcols (cols b) r
+            (map (fun (a: vector) => a ^* b) va))
+      )) m
+  = mu1 (dmap (dmatrix d r (rows b))
+      (fun (a: matrix) => a * b)) m.
+proof.
+move => ?.
+rewrite supp_dmap. case => va [#] /= *.
+rewrite dmatrix_rows 1:rows_ge0 // dmap_comp.
+rewrite !dmap1E /pred1 /(\o) /=.
+congr.
+rewrite fun_ext => va'.
+admit.
+qed.
+
+lemma mulvmx_eq r b va:
+    0 <= r =>
+    trmx (ofcols (rows b) r va) * b = trmx (ofcols (cols b) r (map (fun a => a ^* b) va)).
+proof.
+move => *.
+rewrite eq_matrixP size_mulmx size_tr rows_tr !cols_offunm rows_offunm => /> i j.
+rewrite cols_offunm => *.
+rewrite get_mulmx /=.
+rewrite get_offunm 1:/# /=.
+admit.
+qed.
+
+lemma dmulvmx_add1E d r b m:
     0 <= r =>
     m \in dmap (dlist (dvector d (rows b) `*` dvector d (cols b)) r)
       (fun (acs: (vector * vector) list) =>
@@ -301,12 +373,23 @@ lemma dmatrix_mul_eq d r b m:
       (fun (ac: matrix * matrix) => ac.`1 * b + ac.`2)) m.
 proof.
 move => ?.
-rewrite supp_dmap; case => acs' [#] /= *.
+rewrite supp_dmap; case => acs' [#] /= h *.
 rewrite !dmatrix_rows 1:rows_ge0 // 1:cols_ge0 //.
 rewrite (dmap_dprod (dlist _ r)) dmap_comp /(\o) /=.
 rewrite dlist_dprodE // dmap_comp /(\o) /=.
-congr; congr.
+rewrite !dmap1E /pred1 /(\o) /=.
+subst m.
+move :h.
+rewrite supp_dlist // all_support_dprod => [#] ? h *.
+have h': all (fun (x: vector * vector) => size x.`1 = rows b) acs'.
++ move : h.
+  have -> : (fun (x: vector * vector) => x.`1 \in dvector d (rows b)) = (fun (x : vector * vector) => size x.`1 = rows b /\ forall i, 0 <= i && i < rows b => x.`1.[i] \in d); 1: by smt(supp_dvector).
+  rewrite all_predI => /#.
+
+rewrite -{2}(mulvmx_add_eq _ _ _ _ _ h') //.
+congr.
 rewrite fun_ext; case => a c /=.
+rewrite (mulvmx_add_eq r b acs') //.
 admit.
 qed.
 
@@ -687,7 +770,44 @@ rndsem*{2} 0.
 rndsem*{1} 0.
 rnd.
 auto => /> &2 *.
-split => *.
+split => [*|? m].
+rewrite dmulvmx_add1E // dprod_dlet dmap_dlet /=.
++ congr; congr; rewrite fun_ext => a.
+  have -> : (fun (b: matrix) => dunit (a, b)) = dunit \o (fun b => (a, b)); 1: by done.
+  rewrite dlet_dunit dmap_comp => />.
++ rewrite supp_dlet; case => a; case.
+  rewrite dmatrix_rows 1:rows_ge0 // supp_dmap; case => va; case => /= hva ?.
+  rewrite supp_dmap; case => c; case.
+  rewrite dmatrix_rows 1:cols_ge0 // supp_dmap; case => vc; case => /= hvc *.
+  rewrite supp_dmap.
+  exists (zip va vc) => /=.
+  have hva' : size va = r{2}; 1: by apply (supp_dlist_size _ _ _ _ hva).
+  have hvc' : size vc = r{2}; 1: by apply (supp_dlist_size _ _ _ _ hvc).
+  have [#] har hac : size a = (r{2}, rows b{2}).
+  + by smt(size_tr cols_offunm rows_offunm).
+  have [#] hcr hcc : size c = (r{2}, cols b{2}).
+  + by smt(size_tr cols_offunm rows_offunm).
+  split.
+  + rewrite supp_dlist // -(all_nthP _ _ witness) size_zip hva' hvc' => /> i ? hi.
+    rewrite (nth_zip_cond witness) size_zip hva' hvc' hi supp_dprod => />.
+    have /allP : all (support (dvector d{2} (rows b{2}))) va; 1: by smt(supp_dlist).
+    have /allP : all (support (dvector d{2} (cols b{2}))) vc; 1: by smt(supp_dlist).
+    smt(mem_nth).
+  + subst m.
+    rewrite eq_matrixP size_addm size_mulmx 1:/# size_tr cols_offunm rows_offunm => />.
+    split => [/#|i j].
+    rewrite rows_addm cols_addm rows_mulmx cols_mulmx har hcr hcc => //= ? hir *.
+    rewrite get_offunm 1:/# /=.
+    rewrite get_offunm 1:/# /=.
+    rewrite (nth_map witness witness) 1:size_zip 1:/# nth_zip' // 1,2:/# /=.
+    rewrite get_addv get_mulmx get_mulvmx.
+    subst a c.
+    rewrite trmxE get_offunm 1:/# /= col_ofcols 1:rows_ge0 //.
+    rewrite supp_dlist // in hva.
+    case hva.
+    have -> : support (dvector d{2} (rows b{2})) = fun (v: vector) => size v = rows b{2} /\ forall i, 0 <= i && i < rows b{2} => v.[i] \in d{2}.
+    + smt(supp_dvector).
+    rewrite all_predI => /#.
 qed.
 
 lemma LWE_M_Loop_eq:
