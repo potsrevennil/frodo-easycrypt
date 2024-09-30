@@ -355,8 +355,16 @@ rewrite get_offunm 1:/# /=.
 admit.
 qed.
 
-lemma dmulvmx_add1E d r b m:
-    0 <= r =>
+lemma ofcols_inj m n (v1 v2 : vector list) : 0 <= m => 0 <= n =>
+     size v1 = m
+  => size v2 = n
+  => (forall x, x \in v1 => size x = n)
+  => (forall x, x \in v2 => size x = n)
+  => ofcols m n v1 = ofcols m n v2
+  => v1 = v2.
+proof. admitted.
+
+lemma dmulvmx_add1E d r b m:    0 <= r =>
     m \in dmap (dlist (dvector d (rows b) `*` dvector d (cols b)) r)
       (fun (acs: (vector * vector) list) =>
         trmx
@@ -387,6 +395,23 @@ have h': all (fun (x: vector * vector) => size x.`1 = rows b) acs'.
   rewrite all_predI => /#.
 
 rewrite -{2}(mulvmx_add_eq _ _ _ _ _ h') //.
+apply: mu_eq_support => /= -[v1 v2].
+move/supp_dprod => /= [v1_supp v2_supp].
+have sz_v1 := supp_dlist (dvector d (rows b)) r v1 //.
+have sz_v2 := supp_dlist (dvector d (cols b)) r v2 //.
+apply: eq_iff; split=> eq.
+- rewrite -{2 5}[b]trmxK -2!trmxM -2!trmxD; congr; move: eq.
+  rewrite -mulvmx_add_eq 1://.
+  - by rewrite size_zip /#.
+  - apply/allP => -[x y] /mem_zip[/= + _].
+    case: sz_v1 => /(_ v1_supp) + _ - [? /allP +] x_v1.
+    by move=> /(_ x x_v1); smt(supp_dvector).
+print supp_dvector.
+  search trmx ofcols.
+
+  move/trmx_inj: eq.
+move/(ofcols_inj (cols b) r ).
+
 congr.
 rewrite fun_ext; case => a c /=.
 rewrite (mulvmx_add_eq r b acs') //.
