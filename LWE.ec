@@ -55,28 +55,24 @@ hint simplify Chi_ll.
 (* --------------------------------------------------------------------------- *)
 (* Extension distribution to matrix *)
 
-op duni_matrix = dmatrix duni_R.
-
 hint exact: dmatrix_ll dmatrix_uni dvector_ll.
 hint simplify (dmatrix_ll, dmatrix_uni, dvector_ll).
 
-lemma duni_matrix_ll m n : is_lossless (duni_matrix m n).
+lemma duni_matrix_ll m n : is_lossless (dmatrix duni_R m n).
 proof. by trivial. qed.
 
 
 lemma duni_matrix_fu m n A_:
-     0 <= m => 0 <= n =>  A_ \in (duni_matrix m n) <=> size A_ = (m, n).
+     0 <= m => 0 <= n =>  A_ \in (dmatrix duni_R m n) <=> size A_ = (m, n).
 proof.
 move => ge0m ge0n.
 by apply /supp_dmatrix_full.
 qed.
 
-lemma duni_matrix_uni m n : is_uniform (duni_matrix m n).
+lemma duni_matrix_uni m n : is_uniform (dmatrix duni_R m n).
 proof. by trivial. qed.
 
-op Chi_matrix = dmatrix Chi.
-
-lemma Chi_matrix_ll m n : is_lossless (Chi_matrix m n).
+lemma Chi_matrix_ll m n : is_lossless (dmatrix Chi m n).
 proof. by trivial. qed.
 
 hint simplify (duni_matrix_uni, duni_matrix_ll, Chi_matrix_ll).
@@ -123,7 +119,7 @@ module LWE_M(Adv: Adv_M) = {
 
     sd <$ dseed;
     _A <- G sd m n;
-    _B <$ duni_matrix m k;
+    _B <$ dmatrix duni_R m k;
 
     s <$ dmatrix Chi l m;
     e <$ dmatrix Chi l (n+k);
@@ -144,7 +140,7 @@ module LWE_M_Loop(Adv: Adv_M) = {
 
     sd <$ dseed;
     _A <- G sd m n;
-    _B <$ duni_matrix m k;
+    _B <$ dmatrix duni_R m k;
 
     u0cs <- [];
     u1cs <- [];
@@ -179,7 +175,7 @@ module LWE_V(Adv: Adv_V) = {
 
     sd <$ dseed;
     _A <- G sd m n;
-    _B <$ duni_matrix m k;
+    _B <$ dmatrix duni_R m k;
 
     sc <$ dvector Chi m;
     ec <$ dvector Chi (n + k);
@@ -243,7 +239,7 @@ module LWE_Ob : Orclb = {
 
   proc leaks(): seed*matrix = {
     sd <$ dseed;
-    _B <$ duni_matrix m k;
+    _B <$ dmatrix duni_R m k;
     return (sd, _B);
   }
 
@@ -406,7 +402,7 @@ module LWE_V_Aux (Adv: Adv_M) (O: LWE_RO.RO) = {
   proc distinguish(b': bool): bool = {
     b <- b';
     ObFake.sd <$ dseed;
-    ObFake._B <$ duni_matrix m k;
+    ObFake._B <$ dmatrix duni_R m k;
     O.sample(ObFake.sd, ObFake._B, b);
     b <@ HybGame(B(Adv), ObFake, OFake).main();
     return b;
@@ -548,7 +544,7 @@ end LWE_Hybrid.
 (* LWE adversaries *)
 (* --------------- *)
 op H : seed -> int -> int -> matrix.
-axiom H_mem: forall sd x y, H sd x y \in duni_matrix x y.
+axiom H_mem: forall sd x y, H sd x y \in dmatrix duni_R x y.
 axiom H_rows sd m n:  rows (H sd m n) = m.
 axiom H_cols sd m n:  cols (H sd m n) = n.
 
@@ -566,10 +562,10 @@ module LWE_H1(Adv : Adv_M0) = {
 
     sd <$ dseed;
     _A <- H sd n n;
-    s <$ Chi_matrix n nb;
-    e <$ Chi_matrix n nb;
+    s <$ dmatrix Chi n nb;
+    e <$ dmatrix Chi n nb;
     u0 <- _A * s + e;
-    u1 <$ duni_matrix n nb;
+    u1 <$ dmatrix duni_R n nb;
     u <- if b then u1 else u0;
 
     b' <@ Adv.guess(sd, u);
@@ -589,7 +585,7 @@ clone import LWE_Hybrid as LWE_Hyb1 with
 module Adv_M_T(Adv: Adv_M) = {
   proc guess(sd: seed, m0: matrix): bool = {
     var b, _B;
-    _B <$ duni_matrix n 0;
+    _B <$ dmatrix duni_R n 0;
     m0 <- trmx m0;
     b <@ Adv.guess(sd, _B, m0);
     return b;
@@ -648,13 +644,13 @@ module LWE_H2(Adv : Adv_M) = {
     var sd, b', _A, s', u0, u1, _B, e;
 
     sd <$ dseed;
-    _B <$ duni_matrix n nb;
-    s' <$ Chi_matrix mb n;
-    e <$ Chi_matrix mb (n + nb);
+    _B <$ dmatrix duni_R n nb;
+    s' <$ dmatrix Chi mb n;
+    e <$ dmatrix Chi mb (n + nb);
 
     _A <- H sd n n;
     u0 <- s' * (_A || _B) + e;
-    u1 <$ duni_matrix mb (n + nb);
+    u1 <$ dmatrix duni_R mb (n + nb);
 
     b' <@ Adv.guess(sd, _B, if b then u1 else u0);
     return b';
