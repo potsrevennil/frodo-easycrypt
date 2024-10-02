@@ -552,8 +552,8 @@ op n : { int | 0 < n } as gt0_n.
 op nb : { int | 0 < nb } as gt0_nb.
 op mb : { int | 0 < mb } as gt0_mb.
 
-hint exact: H_rows H_cols gt0_n gt0_nb gt0_mb.
-hint simplify (H_rows, H_cols, gt0_n, gt0_nb, gt0_mb).
+hint exact: H_mem H_rows H_cols gt0_n gt0_nb gt0_mb.
+hint simplify (H_mem, H_rows, H_cols, gt0_n, gt0_nb, gt0_mb).
 
 (* LWE adversary *)
 module LWE_H1(Adv : Adv_M0) = {
@@ -592,37 +592,47 @@ module Adv_M_T(Adv: Adv_M) = {
   }
 }.
 
-lemma LWE_H1_Eq (A <: Adv_M{-LWE_M}) b &m:
-    Pr[LWE_H1(Adv_M_T(A)).main(b) @ &m: res] = Pr[LWE_M(A).main(b) @ &m: res].
+module Adv_M_T'(Adv: Adv_M0) = {
+  proc guess(sd: seed, _B: matrix, m0: matrix): bool = {
+    var b;
+    m0 <- trmx m0;
+    b <@ Adv.guess(sd, m0);
+    return b;
+  }
+}.
+
+lemma LWE_H1_Eq (A <: Adv_M0{-LWE_M}) b &m:
+    Pr[LWE_H1(A).main(b) @ &m: res] = Pr[LWE_M(Adv_M_T'(A)).main(b) @ &m: res].
 proof.
 byequiv => //.
-proc; inline *.
-swap {1} 10 -7; swap {1} 8 1; wp.
-call (:true) => /=; wp.
+proc; inline *; wp.
+call (:true). wp.
 rnd trmx trmx.
 wp.
 rnd trmx trmx.
 rnd trmx trmx.
-auto => //= />.
+rnd{2}.
+auto => />.
 move => sd ? _B ? *.
 split => [sR *|*].
-+ by rewrite /Chi_matrix (dmatrix_tr1E _ _ nb n) // (size_dmatrix Chi nb n sR).
-rewrite supp_dmatrix_tr => /> *.
-rewrite supp_dmatrix_tr => /> *.
++ by rewrite (dmatrix_tr1E _ _ nb n) // (size_dmatrix Chi nb n sR).
+do 2! (rewrite supp_dmatrix_tr => /> *).
 split => [uR *| *].
-+ by rewrite /duni_matrix; apply (dmatrix_tr1E _ duni_R nb n) => //; rewrite (size_dmatrix duni_R nb n uR).
++ by apply (dmatrix_tr1E _ duni_R nb n) => //; rewrite (size_dmatrix duni_R nb n uR).
 rewrite supp_dmatrix_tr => />.
-have -> := (catmr_empty (trmx (H sd n n)) _B n n duni_R _ _ _ _); 1..2, 4: by trivial. by rewrite supp_dmatrix_tr // H_mem.
+rewrite (catmr_empty (trmx (H sd n n)) _B n n duni_R) 3:supp_dmatrix_tr 1..6://.
 case (b) => * //.
 qed.
 
-lemma LWE_H1_restr (A <: Adv_M{-Hyb.Count, -LWE_Ob, -LWE_M_Loop, -Hyb_Mock, -LWE_RO.RO, -LWE_RO.FRO, -LWE_V, -LWE_V_Aux, -LWE_M}) &m:
+lemma LWE_H1_restr (A <: Adv_M0{-Hyb.Count, -LWE_Ob, -LWE_M_Loop, -Hyb_Mock, -LWE_RO.RO, -LWE_RO.FRO, -LWE_V, -LWE_V_Aux, -LWE_M}) &m:
     islossless A.guess =>
-    Pr[LWE_H1(Adv_M_T(A)).main(false) @ &m: res] - Pr[LWE_H1(Adv_M_T(A)).main(true) @ &m: res]
-  = nb%r * (Pr[LWE_V(Hyb_Mock(B(A))).main(false) @ &m : res] - Pr[LWE_V(Hyb_Mock(B(A))).main(true) @ &m : res]).
+    Pr[LWE_H1(A).main(false) @ &m: res] - Pr[LWE_H1(A).main(true) @ &m: res]
+  = nb%r * (Pr[LWE_V(Hyb_Mock(B(Adv_M_T'(A)))).main(false) @ &m : res] - Pr[LWE_V(Hyb_Mock(B(Adv_M_T'(A)))).main(true) @ &m : res]).
 proof.
+move => h.
 rewrite !(LWE_H1_Eq A).
-apply (LWE_H_Hybrid A).
+have : islossless Adv_M_T'(A).guess; 1: by islossless.
+apply (LWE_H_Hybrid (Adv_M_T'(A))).
 qed.
 
 end section.

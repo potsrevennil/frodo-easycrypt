@@ -472,7 +472,11 @@ end section.
 
 section.
 
-declare module A <: Adversary {-LWE_PKE_HASH_PRG}.
+declare module A <: Adversary {-LWE_PKE_HASH_PRG,
+  -LWE_Hyb1.Hyb.Count, -LWE_Hyb1.LWE_Ob, -LWE_Hyb1.LWE_M_Loop, -LWE_Hyb1.Hyb_Mock, -LWE_Hyb1.LWE_RO.RO, -LWE_Hyb1.LWE_RO.FRO, -LWE_Hyb1.LWE_V, -LWE_Hyb1.LWE_V_Aux, -LWE_Hyb1.LWE_M,
+  -LWE_Hyb2.Hyb.Count, -LWE_Hyb2.LWE_Ob, -LWE_Hyb2.LWE_M_Loop, -LWE_Hyb2.Hyb_Mock, -LWE_Hyb2.LWE_RO.RO, -LWE_Hyb2.LWE_RO.FRO, -LWE_Hyb2.LWE_V, -LWE_Hyb2.LWE_V_Aux, -LWE_Hyb2.LWE_M
+}.
+
 
 local module Game2(A : Adversary) = {
   proc main() = {
@@ -537,16 +541,22 @@ qed.
 lemma main_theorem &m :
   islossless A.guess => islossless A.choose =>
   `| Pr[CPA(LWE_PKE_HASH,A).main() @ &m : res] -  1%r / 2%r | <=
-    `| Pr[LWE_H1(B1(A)).main(false) @ &m : res] -
-       Pr[LWE_H1(B1(A)).main(true) @ &m : res] | +
-    `| Pr[LWE_H2(B2(A)).main(false) @ &m : res] -
-       Pr[LWE_H2(B2(A)).main(true) @ &m : res] | +
+    nb%r * `| Pr[LWE_Hyb1.LWE_V(LWE_Hyb1.Hyb_Mock(LWE_Hyb1.B(Adv_M_T'(B1(A))))).main(false) @ &m : res]
+            - Pr[LWE_Hyb1.LWE_V(LWE_Hyb1.Hyb_Mock(LWE_Hyb1.B(Adv_M_T'(B1(A))))).main(true) @ &m : res] | +
+    mb%r * `| Pr[LWE_Hyb2.LWE_V(LWE_Hyb2.Hyb_Mock(LWE_Hyb2.B(B2(A)))).main(false) @ &m : res]
+            - Pr[LWE_Hyb2.LWE_V(LWE_Hyb2.Hyb_Mock(LWE_Hyb2.B(B2(A)))).main(true) @ &m : res] | +
     `| Pr [ PRG_KG.IND(PRG_KG.PRGr,D_KG(A)).main() @ &m : res ] -
         Pr [ PRG_KG.IND(PRG_KG.PRGi,D_KG(A)).main() @ &m : res ] | +
     `| Pr [ PRG_ENC.IND(PRG_ENC.PRGr,D_ENC(A)).main() @ &m : res ] -
         Pr [ PRG_ENC.IND(PRG_ENC.PRGi, D_ENC(A)).main() @ &m : res ] |.
 proof.
 move => A_guess_ll A_choose_ll.
+have h0 := LWE_H1_restr (B1(A)) &m _; 1: by islossless.
+have h1 := LWE_H2_restr (B2(A)) &m _; 1: by islossless.
+rewrite -!RealOrder.normrZ.
++ by rewrite -[nb%r]RField.ofintR RealOrder.ler0n.
++ by rewrite -[mb%r]RField.ofintR RealOrder.ler0n.
+rewrite -h0 -h1.
 have := (cpa_proc A &m).
 rewrite (hop1_left A &m).
 rewrite (hop1_right A &m).
@@ -556,7 +566,6 @@ rewrite (game2_equiv &m).
 rewrite (game2_prob &m _ _) //.
 by smt().
 qed.
-
 end section.
 
 (* NOTE:matrix dimension ? *)
