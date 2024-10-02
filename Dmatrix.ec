@@ -76,6 +76,19 @@ proof.
 by rewrite (dlistS1E d x []) dlist0 // dunit1xx.
 qed.
 
+lemma mulmx_catmrD (m1, m2: matrix) m3:
+    rows m2 = rows m3 =>
+    m1 * (m2 || m3) = ((m1 * m2) || (m1 * m3)).
+proof.
+move => ?.
+rewrite eq_matrixP size_mulmx size_catmr cols_catmr !rows_mulmx !cols_mulmx => /> i j.
+rewrite cols_catmr get_catmr !get_mulmx cols_mulmx -dotpDr=> *.
+congr.
+case (j < cols m2) => *.
++ by rewrite col_catmrL // (col0E _ (j - cols m2)) 1:/# lin_addv0 1:size_col 1:/#.
++ by rewrite col_catmrR // 1:/# (col0E _ j) 1:/# lin_add0v 1:size_col 1:/#.
+qed.
+
 lemma subm_catmc m (r: int, r1: int ,r2:int, c1:int , c2: int):
     0 <= r1 => 0 <= r2 => 
     subm m r (r+r1) c1 c2 / subm m (r+r1) (r+r1+r2) c1 c2 =
@@ -104,6 +117,25 @@ have -> : m = trmx (trmx m); 1: by trivial.
 rewrite -!submT -catmcT.
 congr.
 by rewrite !submT subm_catmc.
+qed.
+
+lemma dmatrix_catmr1E d (m: matrix) r (c1, c2: int):
+    0 <= c1 => 0 <= c2 => size m = (r, c1 + c2) =>
+    mu1 (dmatrix d r (c1 + c2)) m
+  = mu1 (dmatrix d r c1 `*` dmatrix d r c2) (subm m 0 r 0 c1, subm m 0 r c1 (c1+c2)).
+proof.
+move => ? ? [] h0 h1.
+have ? : 0 <= r; 1: by smt(rows_ge0).
+rewrite dmatrix_add_r //.
+rewrite dmap1E /pred1 /(\o) /=.
+apply mu_eq_support => /= -[x1 x2].
+rewrite supp_dprod /= eq_iff !supp_dmatrix // => [#] *.
+split => [*|[#] *].
++ subst m.
+  smt(subm_catmrCl subm_catmrCr).
++ rewrite -[m]subm_id h0 h1.
+  subst x1 x2.
+  by apply (subm_catmr _ _ _ 0 c1 c2).
 qed.
 
 lemma col_mul_eq m1 m2 i: m1 *^ col m2 i = col (m1 * m2) i.

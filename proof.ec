@@ -5,112 +5,38 @@ require (**RndExcept **) LWE FLPRG.
 theory LWE_PKE_Hash.
 
 clone import LWE as LWE_.
-import Matrix.
-import ZR.
 
-(******************************************************************)
-(*                some lemmas                                     *)
+import Dmatrix_.
 
-lemma eq_tuple_imply_fst (x z: 'a) (y w: 'b): (x, y) = (z, w) => (x, y).`1 = (z, w).`1.
-proof. done. qed.
-
-lemma eq_tuple_imply_snd (x z: 'a) (y w: 'b): (x, y) = (z, w) => (x, y).`2 = (z, w).`2.
-proof. done. qed.
-
-
-lemma dmatrix_rows m d r c: 0 < r => 0 < c => m \in dmatrix d r c => rows m = r.
-proof.
-    move => *.
-    rewrite -(fst_pair (rows m) (cols m)) -(fst_pair r c).
-    apply /eq_tuple_imply_fst/(size_dmatrix d r c) => //;
-    by apply ltrW.
-qed.
-
-lemma dmatrix_cols m d r c: 0 < r => 0 < c => m \in dmatrix d r c => cols m = c.
-proof.
-    move => *.
-    rewrite -(snd_pair (rows m) (cols m)) -(snd_pair r c).
-    apply /eq_tuple_imply_snd/(size_dmatrix d r c) => //;
-    by apply ltrW.
-qed.
-
-lemma cancel_addm0 m d r c: 0 < r => 0 < c => m \in dmatrix d r c => m = m + zerom r c.
-proof.
-    move => *.
-    rewrite lin_addm0 => //; rewrite eq_sym.
-    + by apply (dmatrix_rows m d r c).
-    + by apply (dmatrix_cols m d r c).
-qed.
-
-lemma cancel_add0m m d r c: 0 < r => 0 < c => m \in dmatrix d r c => m = zerom r c + m.
-proof.
-   move => *.
-   rewrite addmC.
-   by apply (cancel_addm0 m d r c).
-qed.
-
-lemma duni_matrix_rows m r c: 0 < r => 0 < c => m \in duni_matrix r c => rows m = r.
-proof.
-    rewrite /duni_matrix => *. by apply (dmatrix_rows m duni_R r c).
-qed.
-
-lemma duni_matrix_cols m r c: 0 < r => 0 < c => m \in duni_matrix r c => cols m = c.
-proof.
-    rewrite /duni_matrix => *; by apply (dmatrix_cols m duni_R r c).
-qed.
-
-lemma duni_matrix_mb_nb_rows m: m \in duni_matrix mb nb => rows m = mb.
-proof. by apply /duni_matrix_rows. qed.
-
-lemma duni_matrix_mb_nb_cols m: m \in duni_matrix mb nb => cols m = nb.
-proof. by apply /duni_matrix_cols. qed.
-
-lemma cacnel_duni_mb_nb_addm0 m: m \in duni_matrix mb nb => m = m + zerom mb nb.
-proof. by apply cancel_addm0. qed.
-
-lemma cacnel_duni_mb_nb_add0m m: m \in duni_matrix mb nb => m = zerom mb nb + m.
-proof. by apply cancel_add0m. qed.
-
-lemma in_duni_matrix: forall (m: matrix), size m = (mb, nb) => m \in duni_matrix mb nb.
-proof. by move => *; rewrite duni_matrix_fu. qed.
-
-hint simplify (duni_matrix_mb_nb_rows, duni_matrix_mb_nb_cols).
-hint exact: duni_matrix_mb_nb_rows duni_matrix_mb_nb_cols cacnel_duni_mb_nb_addm0 cacnel_duni_mb_nb_add0m.
-
-lemma chi_matrix_rows m r c: 0 < r => 0 < c => m \in Chi_matrix r c => rows m = r.
-proof.
-    rewrite /Chi_matrix => *; by apply (dmatrix_rows m Chi r c).
-qed.
-
-lemma chi_matrix_cols m r c: 0 < r => 0 < c => m \in Chi_matrix r c => cols m = c.
-proof.
-    rewrite /Chi_matrix => *; by apply (dmatrix_cols m Chi r c).
-qed.
-
-lemma chi_matrix_mb_n_rows m: m \in Chi_matrix mb n => rows m = mb.
-proof. by apply /chi_matrix_rows. qed.
-
-lemma chi_matrix_mb_nb_rows m: m \in Chi_matrix mb nb => rows m = mb.
-proof. by apply /chi_matrix_rows. qed.
-
-lemma chi_matrix_mb_nb_cols m: m \in Chi_matrix mb nb => cols m = nb.
-proof. by apply /chi_matrix_cols. qed.
-
-lemma chi_matrix_n_nb_cols m: m \in Chi_matrix n nb => cols m = nb.
-proof. by apply /chi_matrix_cols. qed.
-
-lemma cancel_chi_mb_nb_addm0 (m: matrix): size m = (mb, nb) => m = m + zerom mb nb.
+lemma cancel_mb_nb_addm0 (m: matrix): size m = (mb, nb) => m = m + zerom mb nb.
 proof.
     move => //= *.
     by rewrite lin_addm0 => /#.
 qed.
 
-lemma cancel_chi_mb_nb_add0m (m: matrix): size m = (mb, nb) => m = zerom mb nb + m.
-proof. rewrite addmC. by apply cancel_chi_mb_nb_addm0. qed.
+lemma cancel_mb_nb_add0m (m: matrix): size m = (mb, nb) => m = zerom mb nb + m.
+proof.
+    move => //= *.
+    by rewrite lin_add0m => /#.
+qed.
 
-hint exact: cancel_chi_mb_nb_addm0 cancel_chi_mb_nb_add0m.
+lemma supp_cancel_mb_nb_addm0 m : forall d, m \in dmatrix d mb nb => m = m + zerom mb nb.
+proof. move => d h. by apply /cancel_mb_nb_addm0 /(size_dmatrix _ _ _ _ h). qed.
+
+lemma supp_cancel_mb_nb_add0m m : forall d, m \in dmatrix d mb nb => m = zerom mb nb + m.
+proof. rewrite addmC. apply supp_cancel_mb_nb_addm0. qed. 
+
+lemma supp_duni_cancel_mb_nb_addm0 m : m \in dmatrix duni_R mb nb => m = m + zerom mb nb.
+proof. by apply supp_cancel_mb_nb_addm0. qed.
+
+lemma supp_duni_cancel_mb_nb_add0m m : m \in dmatrix duni_R mb nb => m = zerom mb nb + m.
+proof. by apply supp_cancel_mb_nb_add0m. qed.
+
+hint exact: cancel_mb_nb_addm0 cancel_mb_nb_add0m supp_cancel_mb_nb_addm0 supp_cancel_mb_nb_add0m supp_duni_cancel_mb_nb_addm0 supp_duni_cancel_mb_nb_add0m.
+
 (******************************************************************)
 (*                pke definition                                  *)
+(******************************************************************)
 type plaintext.
 type ciphertext.
 
@@ -144,6 +70,7 @@ axiom sk_encodeK : cancel sk_encode sk_decode.
 
 (******************************************************************)
 (*                The Hashed Encryption Scheme                     *)
+(******************************************************************)
 
 type randomness.
 
@@ -153,15 +80,15 @@ op prg_kg : randomness -> seed * matrix * matrix.
 op prg_kg_ideal  =
      dlet dseed
        (fun (sd : seed) =>
-          dlet (Chi_matrix n nb) (fun (s : matrix) =>
-               dmap (Chi_matrix n nb) (fun (e : matrix) => (sd, s, e)))).
+          dlet (dmatrix Chi n nb) (fun (s : matrix) =>
+               dmap (dmatrix Chi n nb) (fun (e : matrix) => (sd, s, e)))).
 
 op prg_enc : randomness -> matrix * matrix * matrix.
 op prg_enc_ideal =
-     dlet (Chi_matrix mb n)
+     dlet (dmatrix Chi mb n)
        (fun (s' : matrix) =>
-          dlet (Chi_matrix mb n) (fun (e' : matrix) =>
-               dmap (Chi_matrix mb nb)  (fun (e'' : matrix) => (s', e', e'')))).
+          dlet (dmatrix Chi mb n) (fun (e' : matrix) =>
+               dmap (dmatrix Chi mb nb)  (fun (e'' : matrix) => (s', e', e'')))).
 
 op kg(r : randomness) : pkey * skey =
    let (sd,s,e) = prg_kg r in
@@ -182,6 +109,7 @@ op dec(sk : skey, c : ciphertext) : plaintext option =
 
 (******************************************************************)
 (*    The Security Games                                          *)
+(******************************************************************)
 clone import PKE with
   type pkey <- pkey,
   type skey <- skey,
@@ -215,8 +143,8 @@ module LWE_PKE_HASH_PROC : Scheme = {
   proc kg(): pkey * skey = {
     var sd,s,e,t;
     sd <$ dseed;
-    s  <$ Chi_matrix n nb;
-    e  <$ Chi_matrix n nb;
+    s  <$ dmatrix Chi n nb;
+    e  <$ dmatrix Chi n nb;
     t  <- (H sd n n) * s + e;
     return (pk_encode (sd,t),sk_encode s);
   }
@@ -224,9 +152,9 @@ module LWE_PKE_HASH_PROC : Scheme = {
   proc enc(pk : pkey, m : plaintext) : ciphertext = {
     var sd, b,s',e',e'',b',v;
     (sd,b) <- pk_decode pk;
-    s'  <$ Chi_matrix mb n;
-    e' <$ Chi_matrix mb n;
-    e'' <$ Chi_matrix mb nb;
+    s'  <$ dmatrix Chi mb n;
+    e' <$ dmatrix Chi mb n;
+    e'' <$ dmatrix Chi mb nb;
     b'  <- s' * (H sd n n) + e';
     v  <- s' * b + e'';
     return c_encode (b',v + m_encode m);
@@ -244,7 +172,7 @@ clone import FLPRG as PRG_KG with
   type output <- seed * matrix * matrix,
   op prg <- prg_kg,
   op dseed <- drand,
-  op doubt <- prg_kg_ideal
+  op dout <- prg_kg_ideal
   proof *.
 
 clone import FLPRG as PRG_ENC with
@@ -252,7 +180,7 @@ clone import FLPRG as PRG_ENC with
   type output <- matrix * matrix * matrix,
   op prg <- prg_enc,
   op dseed <- drand,
-  op doubt <- prg_enc_ideal
+  op dout <- prg_enc_ideal
   proof*.
 
 module LWE_PKE_HASH_PRG : Scheme  = {
@@ -382,8 +310,8 @@ module LWE_PKE_HASH1 = {
   proc kg() : pkey * skey = {
     var sd,s,b;
     sd <$ dseed;
-    s  <$ Chi_matrix n nb;
-    b  <$ duni_matrix n nb;
+    s  <$ dmatrix Chi n nb;
+    b  <$ dmatrix duni_R n nb;
     return (pk_encode (sd,b), sk_encode s);
   }
 
@@ -391,7 +319,7 @@ module LWE_PKE_HASH1 = {
 
 }.
 
-module B1(A : Adversary) : HAdv1_M = {
+module B1(A : Adversary) : Adv_M0 = {
 
   proc guess(sd, u : matrix) : bool = {
     var pk, m0, m1, c, b, b';
@@ -436,8 +364,8 @@ module LWE_PKE_HASH2 = {
   proc enc(pk : pkey, m : plaintext) : ciphertext = {
     var _A,b', v;
     _A <- H (pk_decode pk).`1;
-    b' <$ duni_matrix mb n;
-    v <$ duni_matrix mb nb;
+    b' <$ dmatrix duni_R mb n;
+    v <$ dmatrix duni_R mb nb;
     return c_encode (b',v + m_encode m);  }
 
   include LWE_PKE_HASH1 [-enc]
@@ -445,15 +373,15 @@ module LWE_PKE_HASH2 = {
 }.
 
 
-module B2(A : Adversary) : HAdv2_T = {
+module B2(A : Adversary) : Adv_M = {
 
-  proc guess(sd : seed, _B : matrix, b'v : matrix * matrix) : bool = {
+  proc guess(sd : seed, _B : matrix, b'v : matrix) : bool = {
     var pk, m0, m1, c, b, m, b';
     pk <- pk_encode (sd,_B);
     (m0, m1) <@ A.choose(pk);
     b <$ {0,1};
     m <- if b then m1 else m0;
-    c <- c_encode((b'v.`1, b'v.`2 + m_encode m));
+    c <- c_encode((subm b'v 0 mb 0 n, subm b'v 0 mb n (n + nb) + m_encode m));
     b' <@ A.guess(c);
     return b' = b;
   }
@@ -470,14 +398,40 @@ lemma hop2_left &m:
 proof.
 byequiv => //.
 proc. inline *.
-wp. swap {2} 11 -9. swap {2} 12 -8. swap {2} [14..16] -9.
-
-seq 4 5 : (#pre /\ ={pk} /\ b0{1} = _B{2} /\ (pk_decode pk{2}).`1 = seed{2} /\ (pk_decode pk{2}).`2 = _B{2});
-  1: by wp; rnd; rnd{1}; wp; rnd; auto => /> *; rewrite pk_encodeK.
-
+wp.
 call (:true).
-wp; rnd{2}; wp; rnd{2}.
-auto. call (:true) => /> //.
+swap{1} 8 6; swap{1} [5..6] 7.
+wp; rnd; call(:true). wp. rnd{2}. wp.
+rndsem*{1} 7.
+rnd (fun (e: matrix * matrix) => e.`1 || e.`2) (fun e => (subm e 0 mb 0 n, subm e 0 mb n (n + nb))).
+rnd. wp. rnd. rnd{1}. rnd. auto => /> ? ? s hs _b h_b s' hs'.
+split => [? h|? *].
++ rewrite -{1}subm_id.
+  rewrite (subm_catmr _ _ _ 0 n nb) //.
+  congr; move :h; by rewrite supp_dmatrix // 1:addr_ge0.
++ split => ?. 
+  + rewrite supp_dmatrix 2:addz_ge0 // => [#] *.
+    by rewrite -dprod_dlet dmatrix_catmr1E.
+  + move => [e' e''].
+    rewrite -dprod_dlet supp_dprod /=.
+    rewrite !supp_dmatrix 6:addr_ge0 1..7:// => [#] he'r he'c ? he''r he''c ?.
+    rewrite size_catmr rows_catmr he'r he'c he''r he''c => />.
+    split => [i j|*].
+    + rewrite cols_catmr get_catmr he'c he''c => *.
+      case (j < n) => *.
+      + by rewrite (getm0E _ i (j - n)) 1:/# ZR.addr0 => /#.
+      + by rewrite (getm0E _ i j) 1:/# ZR.add0r => /#.
+    + split => *.
+      + smt(subm_catmrCl subm_catmrCr).
+      + rewrite pk_encodeK /=.
+        move :hs h_b hs'.
+        rewrite !supp_dmatrix // => [#] ? ? ? [#] ? ? ? [#] ? ? ?.
+        rewrite mulmx_catmrD 1:/# addm_catmr 1:cols_mulmx 1:/#.
+        pose X := s' * _ + e'.
+        pose Y := s' * _ + e''.
+        have := subm_catmrCl X Y.
+        have := subm_catmrCr X Y.
+        rewrite !rows_addm !rows_mulmx !cols_addm !cols_mulmx => /#.
 qed.
 
 lemma hop2_right &m:
@@ -485,14 +439,33 @@ lemma hop2_right &m:
   Pr[CPA(LWE_PKE_HASH2,A).main() @ &m : res].
 proof.
 byequiv => //.
-proc. inline *.
-swap {1} 11 -9. swap {1} 12 -8. swap{1} 8 -3. swap {1} [14..17] -9. swap {1} 16 -3. swap {1} 15 -2.
-
-seq 5 4 : (#pre /\ ={pk} /\ _B{1} = b0{2} /\ (pk_decode pk{2}).`1 = sd{2} /\ (pk_decode pk{2}).`2 = b0{2}).
-  by wp; rnd; rnd{2}; wp; rnd; auto => /> *; rewrite pk_encodeK.
-wp. call (:true). auto. do 3! rnd{1}. auto. call (:true) => /> //.
+proc; inline *; wp.
+call (:true).
+swap {2} 7 -2. swap{2} [4..9] 2.
+wp. rnd. call(:true).
+wp.
+rndsem*{2} 3.
+rnd (fun m => (subm m 0 mb 0 n, subm m 0 mb n (n + nb))) (fun (m: matrix * matrix) => m.`1 || m.`2).
+wp. swap{2} 2 1. do 2! rnd{1}. rnd{2}. auto => /> *.
+have h : forall (b'0v: matrix * matrix), b'0v \in dlet (dmatrix duni_R mb n) (fun b'0 => dmap (dmatrix duni_R mb nb) (fun v => (b'0, v)))
+  => size b'0v.`1 = (mb, n) /\ size b'0v.`2 = (mb, nb) /\
+     subm (b'0v.`1 || b'0v.`2) 0 mb 0 n = b'0v.`1 /\ subm (b'0v.`1 || b'0v.`2) 0 mb n (n + nb) = b'0v.`2.
++ move => -[b'0 v]. rewrite -dprod_dlet supp_dprod !supp_dmatrix 1..4:// => />.
+  smt(subm_catmrCl subm_catmrCr).
+split => [? hb0v|*].
++ have /# := h _ hb0v.
+split => [? hb0v|? ?].
++ have [#] * := h _ hb0v.
+  rewrite -dprod_dlet dmatrix_catmr1E 1,2:// 1:size_catmr 1:/# => /#.
++ rewrite -dprod_dlet supp_dprod /=.
+  rewrite !supp_dmatrix 2:addr_ge0 1..7:// !size_subm => [#].
+  have -> /> hur huc hu: n+nb-n = nb; 1: by rewrite /#.
+  split => *.
+  + split => *; rewrite get_subm 1,2:/#.
+    rewrite hu hur huc ltr_paddr 1:// 1:/# => />.
+    rewrite hu hur huc [n+nb]addrC ltr_le_add 1:/# 1:// [0 <= _ + n]addr_ge0 => />.
+  + by rewrite -{1}subm_id hur huc (subm_catmr _ _ _ 0 n nb). 
 qed.
-
 end section.
 
 (* Final game analysis *)
@@ -505,13 +478,13 @@ local module Game2(A : Adversary) = {
   proc main() = {
     var sd, _B, m0, m1, m, _B', v, c, b, b';
     sd <$ dseed;
-    _B <$ duni_matrix n nb;
+    _B <$ dmatrix duni_R n nb;
     (m0, m1) <@ A.choose(pk_encode (sd,_B));
     b <$ {0,1};
     m <- if b then m1 else m0;
 
-    _B' <$ duni_matrix mb n;
-    v <$ duni_matrix mb nb;
+    _B' <$ dmatrix duni_R mb n;
+    v <$ dmatrix duni_R mb nb;
     c <- c_encode(_B', v);
     b' <@ A.guess(c);
     return b = b';
@@ -531,22 +504,20 @@ auto. call(_:true). auto. rnd{1}.
 auto => /> *.
 pose x := m_encode _.
 split.
-+ move => *.
-  by rewrite -addmA [_+x]addmC addmN.
++ move => ?.
+  by rewrite supp_dmatrix 1,2:// -addmA [_+x]addmC addmN.
 move => *.
 split.
 + move => vR ?.
   rewrite !mu1_uni; rewrite ?duni_matrix_uni.
-  have ->: vR - x \in duni_matrix mb nb.
-  + by rewrite in_duni_matrix rows_addm rows_neg cols_addm cols_neg m_encode_rows m_encode_cols duni_matrix_mb_nb_rows // duni_matrix_mb_nb_cols //.
+  have ->: vR - x \in dmatrix duni_R mb nb.
+  smt(duni_matrix_fu rows_addm rows_neg cols_addm cols_neg m_encode_rows m_encode_cols).
   by rewrite /#.
 move => ? vL *.
 split => *.
-+ by rewrite in_duni_matrix rows_addm cols_addm m_encode_rows m_encode_cols duni_matrix_mb_nb_rows // duni_matrix_mb_nb_cols //.
-split.
++ smt(duni_matrix_fu rows_addm rows_neg cols_addm cols_neg m_encode_rows m_encode_cols).
+split => [|/#].
 + by rewrite -addmA addmN.
-move => ? result_R.
-rewrite [result_R = _]eq_sym => //.
 qed.
 
 local lemma game2_prob &m :
@@ -614,11 +585,11 @@ module CorrectnessAdvNoise(A : CORR_ADV) = {
   proc main() = {
     var sd,s,s',e, e', e'', t, _A, m, nu, pk, sk;
     sd <$ dseed;
-    s  <$ Chi_matrix n nb;
-    s'  <$ Chi_matrix mb n;
-    e  <$ Chi_matrix n nb;
-    e'  <$ Chi_matrix mb n;
-    e''  <$ Chi_matrix mb nb;
+    s  <$ dmatrix Chi n nb;
+    s'  <$ dmatrix Chi mb n;
+    e  <$ dmatrix Chi n nb;
+    e'  <$ dmatrix Chi mb n;
+    e''  <$ dmatrix Chi mb nb;
     _A <- H sd n n;
     t  <- _A * s + e;
 
@@ -633,11 +604,11 @@ module CorrectnessAdvNoise(A : CORR_ADV) = {
 module CorrectnessBound = {
   proc main() = {
     var s, s', e, e', e'', nu;
-    s  <$ Chi_matrix n nb;
-    s'  <$ Chi_matrix mb n;
-    e  <$ Chi_matrix n nb;
-    e'  <$ Chi_matrix mb n;
-    e''  <$ Chi_matrix mb nb;
+    s  <$ dmatrix Chi n nb;
+    s'  <$ dmatrix Chi mb n;
+    e  <$ dmatrix Chi n nb;
+    e'  <$ dmatrix Chi mb n;
+    e''  <$ dmatrix Chi mb nb;
     nu <- noise_exp_val s s' e e' e'';
     return !under_noise_bound nu max_noise;
   }
@@ -696,33 +667,29 @@ seq 9 10: (
   sk_decode sk{1} = s{1} /\
   t{1} = H sd{1} n n * s{1} + e{1} /\
   _A{2} = H sd{2} n n /\
-  s'{1} \in Chi_matrix mb n /\
-  e'{1} \in Chi_matrix mb n /\
-  e''{1} \in Chi_matrix mb nb /\
-  e{1} \in Chi_matrix n nb
+  s'{1} \in dmatrix Chi mb n /\
+  e'{1} \in dmatrix Chi mb n /\
+  e''{1} \in dmatrix Chi mb nb /\
+  e{1} \in dmatrix Chi n nb
 ).
 + call (_:true); auto => />. move => * />; split;
   [by apply /pk_encodeK|by apply /sk_encodeK].
 
 auto => />.
 move => &1 &2 ->.
-move => /chi_matrix_mb_n_rows hrs';
-move => /chi_matrix_mb_n_rows hre';
-move => ^ /chi_matrix_mb_nb_rows hre'' /chi_matrix_mb_nb_cols hce'';
-move => /chi_matrix_n_nb_cols hce.
+rewrite !supp_dmatrix // => ? ? ? ?.
 rewrite /noise_exp /= [_+m_encode _]addmC -addmA.
 pose x := _ * (H _ n n * sk_decode _ + _) + _ - _.
-
-apply Logic.contra;
+apply Logic.contra.
 rewrite [_+x-_]addmC addmA addNm m_encode_rows m_encode_cols.
-rewrite -cancel_chi_mb_nb_add0m.
+rewrite -cancel_mb_nb_add0m.
 + rewrite /x mulmxDr mulmxDl oppmD.
-  rewrite ?rows_addm ?rows_neg ?rows_mulmx ?cols_addm ?cols_neg ?cols_mulmx.
+  rewrite ?rows_addm ?rows_neg ?rows_mulmx ?cols_addm ?cols_neg ?cols_mulmx /=.
   rewrite /#.
 by apply good_m_decode.
 qed.
 
-lemma matrix_cacnel (x y z: matrix): x = y => x + z = y + z.
+lemma matrix_cancel (x y z: matrix): x = y => x + z = y + z.
 proof. done. qed.
 
 lemma correctness_bound &m:
@@ -735,12 +702,9 @@ byequiv => //.
 proc; inline *.
 wp. call{1}(:true ==> true). wp. do 5! rnd. rnd{1}.
 auto => // />.
-move => sd ?;
-move => s /chi_matrix_n_nb_cols hcs;
-move => s' /chi_matrix_mb_n_rows hrs';
-move => e /chi_matrix_n_nb_cols hce;
-move => e' /chi_matrix_mb_n_rows hre';
-move => e'' ^ /chi_matrix_mb_nb_rows hre'' /chi_matrix_mb_nb_cols hce'' m.
+move => sd hsd s hs s' hs' e he e' he' e'' he''.
+move :hs hs' he he' he''.
+rewrite !supp_dmatrix // => ? ? ? ? ? ?. 
 apply /congr1; congr.
 rewrite /noise_exp/noise_exp_val => /=.
 rewrite -[(_ - _ - _)%Matrices]addmA -oppmD mulmxDl mulmxDr.
@@ -748,7 +712,7 @@ rewrite sub_eqm /= ?rows_addm ?rows_neg ?rows_mulmx ?cols_addm ?cols_neg ?cols_m
 1..2: rewrite /#.
 
 rewrite addmA.
-apply matrix_cacnel.
+apply matrix_cancel.
 rewrite mulmxA.
 pose x := s' * _ * s. rewrite -[x + _ + _]addmA.
 pose y := s' * e + e''.
