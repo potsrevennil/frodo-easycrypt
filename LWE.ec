@@ -100,8 +100,8 @@ module type Adv_V = {
 theory LWE_Hybrid.
 
 op G : seed -> int -> int -> matrix.
-axiom G_rows : forall sd m n, rows (G sd m n) = m. 
-axiom G_cols : forall sd m n, cols (G sd m n) = n. 
+axiom G_rows : forall sd m n, rows (G sd m n) = m.
+axiom G_cols : forall sd m n, cols (G sd m n) = n.
 
 op k : { int | 0 <= k } as ge0_k.
 op l : { int | 0 < l } as gt0_l.
@@ -187,33 +187,48 @@ module LWE_V(Adv: Adv_V) = {
    }
 }.
 
-lemma LWE_M_Loop_Eq (A <: Adv_M{-LWE_M, -LWE_M_Loop}) b &m:
-    Pr[LWE_M(A).main(b) @ &m: res] = Pr[LWE_M_Loop(A).main(b) @ &m: res].
+lemma LWE_M_Loop_eq (A <: Adv_M{-LWE_M, -LWE_M_Loop}):
+    equiv[LWE_M(A).main ~ LWE_M_Loop(A).main : ={glob A, b} ==> ={res}].
 proof.
-byequiv => //.
 proc.
 fission{2} 7!1 @ 4,6.
 swap{2} 10 -2; swap{2} 5 4.
-outline{2} [4-7] u0 <@ SampleLWE.LWE_M_Loop.sampleG.
-outline{2} [5-8] u1 <@ SampleM.VectorRowsLoopRcons.sample.
-rewrite equiv[{2} 4 -SampleLWE.LWE_M_Loop_eqG].
-rewrite equiv[{2} 5 -SampleM.Matrix_VectorRowsLoopRcons_eq].
-inline *;
-call (:LWE_M.sd{1} = LWE_M_Loop.sd{2}).
-do 3! cfold{2} 13; wp; rnd.
-swap{2} 6 4; do 4! cfold{2} 4; wp; auto.
-+ inline *. auto => /> *. apply addr_ge0 => //.
+seq 3 3: (
+  ={glob A, b, _A, _B}
+  /\ LWE_M.sd{1} = LWE_M_Loop.sd{2}
+  /\ _A{1} = G LWE_M.sd{1} m n
+  /\ _A{2} = G LWE_M_Loop.sd{2} m n
+  /\ size _B{1} = (m, k)
+  /\ size _B{2} = (m, k)
+).
++ auto => /> ? ? ?.
+  by rewrite supp_dmatrix.
+outline{2} [1-4] u0 <@ SampleLWE.LWE_M_Loop.sampleG.
+outline{2} [2-5] u1 <@ SampleM.VectorRowsLoopRcons.sample.
+rewrite equiv[{2} 1 -SampleLWE.LWE_M_Loop_eqG].
+rewrite equiv[{2} 2 -SampleM.Matrix_VectorRowsLoopRcons_eq].
+inline *; call (:LWE_M.sd{1} = LWE_M_Loop.sd{2}).
+do 3! cfold{2} 10; wp; rnd.
+swap{2} 3 1; do 3! cfold{2} 1; wp; auto => />.
++ inline *; auto => /> *; by apply addr_ge0.
 + auto => /> *. rewrite rows_catmr cols_catmr /=. smt(size_dmatrix gt0_m ge0_k).
-+ call (:true); inline{1} 5.
-  do 3! cfold{1} 5; wp; while (i0{1} = i{2} /\ vs{1} = u1cs{2}); auto => />. smt().
-  call (:true). wp. while (={d,x,y,i,r,vs,b}); auto => />. 
++ call (:true); inline{1} 2.
+  do 3! cfold{1} 2; wp; while (i0{1} = i{2} /\ vs{1} = u1cs{2}); auto => />. smt().
+  call (:true). wp. while (={d,x,y,i,r,vs,b}); auto => />.
   auto => />.
-+ inline *; do 2! cfold {1} 4; do 2! cfold{1} 5; wp.
++ inline *; do 2! cfold {1} 1; do 2! cfold{1} 2; wp.
   call (:true); wp.
   while (={i,u1cs}).
   + sim.
   + wp; while (={_A,_B} /\ i0{1} = i{2} /\ vs{1} = u0cs{2} /\ b0{1} = (_A{1} || _B{1}));
     auto => />.
+qed.
+
+lemma LWE_M_Loop_Eq (A <: Adv_M{-LWE_M, -LWE_M_Loop}) b &m:
+    Pr[LWE_M(A).main(b) @ &m: res] = Pr[LWE_M_Loop(A).main(b) @ &m: res].
+proof.
+byequiv (_: ={glob A, b} ==> ={res}) => //.
+exact (LWE_M_Loop_eq A).
 qed.
 
 (* --------------------------------------------------------------------------- *)
