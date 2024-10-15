@@ -70,6 +70,40 @@ The abstract goes here.
 
 \section{Introduction}
 
+The transition to post-quantum cryptography (PQC) has seen an important development in 2024 with the publication of the first PQC standards FIPS-203, FIPS-204 and FIPS-204 by NIST~\cite{}. The standardised algorithms are called, ML-KEM, ML-DSA and SLH-DSA, and they essentially match the Kyber, Dilithium and SPHINCS+ submissions with minor changes, respectively. These algorithms will see large-scale deployment in the near future in many practical applications as mitigation for the potential arrival of a quantum computer. Key Encapsulation Mechanisms (KEM), such as ML-KEM are arguably the most critical components in the PQC transition, as they guarantee protection against so-called {\em harvest now, decrypt later} attacks with respect to which data exchanged today is already at risk.
+For this reason, ML-KEM is already being deployed by software giants Apple, Google and Amazon~\cite{}, and the number of deployed implementations is expected to grow fast in the near future.
+Another competitor in the NIST PQC competition for KEMs is called FrodoKEM. Although not selected for NIST for standardisation, FrodoKEM's conservative design---its security is based on the standard Learning With Errors (LWE) assumption, rather than the Module LWE (MLWE) assumption used by ML-KEM---has led to endorsement of entities such as the German Bundesamt für Sicherheit in der Informationstechnik (BSI) for adoption in the transition to PQC.
+
+Widely deployed cryptographic (de facto) standards such as ML-KEM and FrodoKEM will be critical security components in the ITC infrastructure of the coming decades, and so it is crucial that their design is validated to the highest level of assurance. For ML-KEM, several recent works have looked at formally verifying both the design and efficient implementation of the standard. In particular, Almeida et al.~\cite{,} presented formally verified proofs of cryptographic security (IND-CCA) and correctness---the guantee that decapsulation inverts encapsulation---in EasyCrypt. Alternative proofs of IND-CPA security and correctness were given by Kreuzer et al.~\cite{} in Isabelle. However, in both of these works, there is one aspect of the security and correctness claims that support the ML-KEM design that is not formally verified: the concrete values for the probability of a failed decryption. Both works account for the probability of a failed decryption by defining a statistical event and proving that bounding the probability of such an event yields an upper bound for decryption failure. 
+But neither work provides a means to compute or even upper-bound this concrete probability to a high-level of assurance. 
+In this paper we address this gap. We begin by recalling the importance of decryption errors in post-quantum KEM security.
+
+\subsubsection*{The importance of decryption errors}
+Unlike Diffie-Hellman and RSA-based constructions, which typically yield perfectly correct cryptographic constructions, lattice-based constructions often allow for a low probability of error in order to optimize the compromise between security and performance. 
+One might think that a decryption error would represent only an inconvenience for practical applications, e.g., in that it would cause message transmission to sometimes fail.
+However, it is well known that, when freely exposed to an adversary, decryption errors can lead to devastating attacks on lattice-based constructions~\cite{PKC:DAnBat22,PQCRYPTO:BinSch20,PKC:DGJNVV19b}. 
+Put differently, lattice-based KEM  constructions such as ML-KEM and FrodoKEM are supported by IND-CCA security proofs where the overall bound on an attacker's advantage in breaking the KEM must typically account for the probability that the attacker can cause a decryption error to occur. This means that, in order to have a concrete security bound for the construction, one must bound the probability of a decryption error. 
+
+Intuitively it is easy to undertand why this is the case. ML-KEM and FrodoKEM internally use the Fujisaki-Okamoto~\cite{} transformation, where IND-CCA security is achieved by having the decapsulation algorithm check consistency of a recovered decryption result via re-encryption. I.e., informally, decapsulation checks that $C = \mathrm{Enc}(pk,M;H(M))$, where $M = \mathrm{Dec}(sk,C)$. 
+If the check succeeds, then decapsulation proceeds; otherwise the ciphertext is rejected.
+Indeed, correct decryption and re-encryption is taken as evidence that $C$ was honestly constructed by the adversary starting from $M$, rather than mauling another ciphertext from which it is trying to extract information.
+The soundness of this technique crucially depends on the adversary not being able exploit decryption correctness errors, which is why the probability of a correctness error appears in the security bound for the IND-CCA construction.
+
+\subsubsection*{Bounding the probability of decryption error} 
+Among the algorithms considered for the last round of the NIST PQC competition, three of them were very close in structure: Kyber, Saber and FrodoKEM.\footnote{FrodoKEM was not a finalist, but kept as an alternate candidate.}
+All of these schemes start from a lattice-based IND-CPA encryption scheme and then apply the Fujisaki-Okamoto transform outlined above. Moreover, all three proposals support the soundness of their designs and parameter choices by computing exact bounds for statistical events that permit setting upper bounds for the probability of a decryption failure of the IND-CPA scheme, which also yields a bound for the decryption failure of the IND-CCA scheme.
+Interestingly, all three bounds were computed using adaptations of the same Python script, which was originally produced for the first version of the FrodoKEM proposal~\cite{CCS:BCDMNN16}.\footnote{\url{https://github.com/lwe-frodo/parameter-selection}}
+
+The computation performed by this script can be described as follows.
+The IND-CPA scheme decryption procedure recovers $M' = C_2 - C_1S$ where $M$, $C_1$ and $C_2$ are matrices of (binary) field elements and $M'$ encodes a message in the most significant bits of its entries. Here, $(C_1,C_2)$ are produced by the encryption procedure as $C_1 = S'A+E'$ and $C_2 = S'B+E'' + M$, where matrices $A$ and $B=AS+E$ are fixed by the public encryption key, the $S$ matrix is the secret key, and $S'$, $E$, $E'$ and $E''$ are noise matrices sampled from distributions with very small support of elements close to $0$. A straightforward linear algebra argument shows that $M'=M$ if the noise expression $E'''=S'E+E''-E'S$ results in a matrix where {\em all} entries are field elements with a small norm, i.e., they are small enough that the entries in $M$ and $M'$ have the same most significant bits.
+The python scrypt brute-force computes the probability mass function of a coefficient in $E'''$ and computes the tail probability of a value exceeding the correctness threshold. The overall correctness bound follows from arguing that all entries in $E'''$, individually, have the same distribution, and computing a union bound. We note that these computations are performed using floating point arithmetic and result in values of the order of $2^{-200}$. 
+The cases of ML-KEM (i.e., Kyber) and Saber are slightly more intricate due to the use of rounding, but the principle is the same.
+
+As it stands, the correctness of the computed bounds that support the ML-KEM standard, and the FrodoKEM and Saber proposals have not been subject to formal verification. 
+
+\subsubsection*{Our Contributions}
+
+
 Story
 \begin{itemize}
 \item Lattice-based crypto security and correctnes proofs have been formally verified
@@ -94,6 +128,6 @@ Story
 \section{Conclusions and future work}
 
 \bibliographystyle{IEEEtran}
-\bibliography{local.bib}
+\bibliography{local.bib,cryptobib/crypto,cryptobib/abbrev3}
 
 \end{document}

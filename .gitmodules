@@ -7,3 +7,6 @@
 [submodule "jasmin"]
 	path = jasmin
 	url = https://github.com/jasmin-lang/jasmin.git
+[submodule "paper/cryptobib"]
+	path = paper/cryptobib
+	url = https://github.com/cryptobib/export
