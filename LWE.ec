@@ -98,11 +98,11 @@ module type Adv_V = {
    proc guess(sd: seed, _B: matrix, v : vector) : bool
 }.
 
-theory LWE_Hybrid.
+abstract theory LWE_Hybrid.
 
 op G : seed -> int -> int -> matrix.
-axiom G_rows : forall sd m n, rows (G sd m n) = m.
-axiom G_cols : forall sd m n, cols (G sd m n) = n.
+axiom G_rows : forall sd m n, 0 <= m => rows (G sd m n) = m.
+axiom G_cols : forall sd m n, 0 <= n => cols (G sd m n) = n.
 
 op k : { int | 0 <= k } as ge0_k.
 op l : { int | 0 < l } as gt0_l.
@@ -212,7 +212,9 @@ inline *; call (:LWE_M.sd{1} = LWE_M_Loop.sd{2}).
 do 3! cfold{2} 10; wp; rnd.
 swap{2} 3 1; do 3! cfold{2} 1; wp; auto => />.
 + inline *; auto => /> *; by apply addr_ge0.
-+ auto => /> *. rewrite rows_catmr cols_catmr /=. smt(size_dmatrix gt0_m ge0_k).
++ auto => /> *. rewrite rows_catmr cols_catmr /=.
+  rewrite G_rows // G_cols //.
+    smt(size_dmatrix gt0_m ge0_k).
 + call (:true); inline{1} 2.
   do 3! cfold{1} 2; wp; while (i0{1} = i{2} /\ vs{1} = u1cs{2}); auto => />. smt().
   call (:true). wp. while (={d,x,y,i,r,vs,b}); auto => />.
@@ -560,9 +562,9 @@ end LWE_Hybrid.
 (* LWE adversaries *)
 (* --------------- *)
 op H : seed -> int -> int -> matrix.
-axiom H_mem: forall sd x y, H sd x y \in dmatrix duni_R x y.
-axiom H_rows sd m n:  rows (H sd m n) = m.
-axiom H_cols sd m n:  cols (H sd m n) = n.
+axiom H_mem: forall sd x y, 0 <= x => 0 <= y => H sd x y \in dmatrix duni_R x y.
+axiom H_rows sd m n:  0 <= m => rows (H sd m n) = m.
+axiom H_cols sd m n:  0 <= n => cols (H sd m n) = n.
 
 op n : { int | 0 < n } as gt0_n.
 op nb : { int | 0 < nb } as gt0_nb.
@@ -596,7 +598,24 @@ clone import LWE_Hybrid as LWE_Hyb1 with
   op l <- nb,
   op m <- n,
   op n <- n
-  proof * by smt(rows_tr cols_tr).
+  proof
+    ge0_k by done,
+    gt0_l by done,
+    gt0_m by done,
+    gt0_n by done,
+    *.
+
+realize G_rows.
+proof.
+move => *.
+by rewrite rows_tr.
+qed.
+
+realize G_cols.
+proof.
+move => *.
+by rewrite cols_tr.
+qed.
 
 module Adv_M_T(Adv: Adv_M) = {
   proc guess(sd: seed, m0: matrix): bool = {

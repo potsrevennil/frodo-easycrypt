@@ -426,6 +426,8 @@ split => [? h|? *].
       + rewrite pk_encodeK /=.
         move :hs h_b hs'.
         rewrite !supp_dmatrix // => [#] ? ? ? [#] ? ? ? [#] ? ? ?.
+        have ? : forall sd, rows (H sd n n) = n; 1: by smt(rows_ge0 H_rows).
+        have ? : forall sd, cols (H sd n n) = n; 1: by smt(rows_ge0 H_cols).
         rewrite mulmx_catmrD 1:/# addm_catmr 1:cols_mulmx 1:/#.
         pose X := s' * _ + e'.
         pose Y := s' * _ + e''.
