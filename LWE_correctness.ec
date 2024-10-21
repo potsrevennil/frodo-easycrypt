@@ -586,9 +586,7 @@ axiom good_m_decode m n :
   under_noise_bound n max_noise =>
   m_decode (m_encode m + n) = m.
 
-axiom sk_decode_cols sk: cols (sk_decode sk) = nb.
-
-hint simplify (sk_decode_cols, good_c_decode).
+hint simplify (good_c_decode).
 
 module CorrectnessAdvNoise(A : CORR_ADV) = {
   proc main() = {
@@ -672,23 +670,23 @@ proc. inline *.
 swap {1} 10 -7; swap {1} [11..12] -6.
 seq 9 10: (
   ={sd, s, s', e, e', e'', m} /\
-  pk_decode pk{1} = (sd{1}, t{1}) /\
-  sk_decode sk{1} = s{1} /\
+  pk{1} = pk_encode (sd{1}, t{1}) /\
+  sk{1} = sk_encode s{1} /\
   t{1} = H sd{1} n n * s{1} + e{1} /\
   _A{2} = H sd{2} n n /\
+  s{1} \in dmatrix Chi n nb /\
   s'{1} \in dmatrix Chi mb n /\
   e'{1} \in dmatrix Chi mb n /\
   e''{1} \in dmatrix Chi mb nb /\
   e{1} \in dmatrix Chi n nb
 ).
-+ call (_:true); auto => />. move => * />; split;
-  [by apply /pk_encodeK|by apply /sk_encodeK].
++ call (_:true); auto => />.
 
-auto => />.
-move => &1 &2 ->.
-rewrite !supp_dmatrix // => ? ? ? ?.
+auto => /> &2.
+rewrite !supp_dmatrix // => ? ? ? ? ?.
+rewrite pk_encodeK sk_encodeK.
 rewrite /noise_exp /= [_+m_encode _]addmC -addmA.
-pose x := _ * (H _ n n * sk_decode _ + _) + _ - _.
+pose x := _ * (H _ n n * _ + _) + _ - _.
 apply Logic.contra.
 rewrite [_+x-_]addmC addmA addNm m_encode_rows m_encode_cols.
 rewrite -cancel_mb_nb_add0m.
