@@ -1,12 +1,13 @@
 require import AllCore Distr List StdOrder PROM.
+require (****) Dmatrix.
 require (****) DynMatrix.
 (****) import IntOrder.
 require (****) Hybrid.
 require import SmtMap.
 
-require (****) Dmatrix.
-
-clone import Dmatrix as Dmatrix_.
+clone import DynMatrix as DM.
+clone import Dmatrix as Dmatrix_ with
+  theory DM <- DM.
 
 clone import SampleLWE.
 clone import SampleM.

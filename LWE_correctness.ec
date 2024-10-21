@@ -1,12 +1,12 @@
 require import AllCore Distr List SmtMap Dexcepted PKE_ROM StdOrder.
-require (**RndExcept **) LWE FLPRG.
+require (**RndExcept **) LWE FLPRG DynMatrix.
 (*****) import IntOrder.
 
-theory LWE_PKE_Hash.
+clone import DynMatrix as DM.
+clone import LWE as LWE_ with
+  theory DM <- DM.
 
-clone import LWE as LWE_.
-
-import Dmatrix_.
+import LWE_.Dmatrix_.
 
 lemma cancel_mb_nb_addm0 (m: matrix): size m = (mb, nb) => m = m + zerom mb nb.
 proof.

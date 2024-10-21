@@ -1,11 +1,13 @@
 require import AllCore Distr List.
-require import Distrmatrix.
+require (*--*) Distrmatrix.
+require (*--*) DynMatrix.
 require import DList.
 import StdOrder.IntOrder.
 import StdBigop.Bigreal.BRM.
-(*****) import DM.
 
-export DM.
+clone import DynMatrix as DM.
+clone import Distrmatrix as Distrmatrix_ with
+  theory DM <- DM.
 
 lemma max_eq x: max x x = x.
 proof. done. qed.
