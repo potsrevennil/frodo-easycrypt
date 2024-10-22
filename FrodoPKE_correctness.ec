@@ -47,6 +47,7 @@ clone DynMatrix as DM.
 section.
 
 import DM.
+import DM.ZR.
 
 op sample (r: bool list): R =
   let r' = take (size CDF_table) r in
@@ -86,15 +87,120 @@ op m_encode (pt: bool list): matrix =
 
 op dc (c : R): int.
 
+op toRowVectors (m: matrix): vector list =
+  map (row m) (range 0 (rows m)).
+
+op toColVectors (m: matrix): vector list =
+  map (col m) (range 0 (cols m)).
+
+lemma cancel_toColVectors_ofcols (vs: vector list) r c: 
+    0 <= r => 0 <= c =>
+    all (fun (v: vector) => size v = r) vs =>
+    size vs = c =>
+    toColVectors (ofcols r c vs) = vs.
+proof.
+move => ? ? h ?.
+rewrite /toColVectors.
+rewrite cols_offunm lez_maxr 1://.
+apply (eq_from_nth witness).
++ rewrite size_map size_range => /#.
++ move => i [#].
+  rewrite size_map size_range /= => *.
+  rewrite (nth_map witness witness) 1:size_range 1:/# nth_range 1:/#.
+  rewrite eq_vectorP.
+  rewrite size_col rows_offunm lez_maxr 1://.
+  have -> /= : size (nth witness vs i) = r; 1: by smt(List.allP mem_nth).
+  move => j [#] *.
+  by rewrite get_offunm 1:/#.
+qed.
+
+lemma cancel_ofcols_toColVectors (m: matrix):
+    ofcols (rows m) (cols m) (toColVectors m) = m.
+proof.
+rewrite eq_matrixP.
+rewrite rows_offunm cols_offunm => /> i j *.
+rewrite get_offunm 1:/# /=.
+rewrite /toColVectors (nth_map witness) 1:size_range 1:/#.
+by rewrite get_offunv 1:/# /= nth_range 1:/#.
+qed.
+
+lemma toRowVectors_trmx m:
+    toRowVectors (trmx m) = toColVectors m.
+proof.
+rewrite /toRowVectors /toColVectors /=.
+smt(row_trmx).
+qed.
+
+lemma cancel_ofcols_toRowVectors (m: matrix):
+    trmx (ofcols (cols m) (rows m) (toRowVectors m)) = m.
+proof.
+rewrite -{3}(trmxK m) -{4}(trmxK m).
+apply congr1.
+rewrite toRowVectors_trmx.
+exact cancel_ofcols_toColVectors.
+qed.
+
+lemma subm_ofcols (vs: vector list) r c:
+    0 <= c => 0 <= r =>
+    all (fun (v: vector) => size v = r) vs =>
+    size vs = c =>
+    subm (ofcols r c vs) 0 r 0 c = ofcols r c vs.
+proof.
+move => *.
+rewrite eq_matrixP.
+rewrite size_subm rows_offunm cols_offunm /= => i j [#] *.
+by rewrite get_subm 1,2:/#.
+qed.
+    
+lemma ofcols_add (vs1 vs2: vector list) r c:
+    0 <= r =>
+    0 <= c =>
+    size vs1 = c =>
+    size vs2 = c =>
+    all (fun (v: vector) => size v = r) vs1 =>
+    all (fun (v: vector) => size v = r) vs2 =>
+    ofcols r c vs1 + ofcols r c vs2 = ofcols r c (map (fun i => nth witness vs1 i + nth witness vs2 i) (range 0 c)).
+proof.
+admit.
+qed.
+
 op m_decode (m: matrix): bool list =
-  let s = foldl (fun xs i => xs ++
-    foldl (fun s j => rcons s m.[(i, j)]) [] (range 0 Nb)
-  ) [] (range 0 Mb) in
-  flatten (map (fun c => int2bs B (dc c)) s).
+  let dc' = fun c => int2bs B (dc c) in
+  flatten (map dc' (flatten (map tolist (toRowVectors (subm m 0 Mb 0 Nb))))).
+
+axiom good_dc (k: int) (e: R) (p: R -> bool):
+     0 <= k < (2^B)
+  => p e
+  => dc (ec k + e) = k.
 
 end section.
 
 import DM.
+
+lemma subm_addm (m n: matrix) r1 r2 c1 c2:
+    0 <= r1 =>
+    r1 <= r2 =>
+    0 <= c1 =>
+    c1 <= c2 =>
+    subm (m + n) r1 r2 c1 c2 = subm m r1 r2 c1 c2 + subm n r1 r2 c1 c2.
+proof.
+move => *.
+rewrite eq_matrixP size_addm !size_subm => /> i j *.
+rewrite get_subm 1,2:/#.
+by rewrite !get_addm !get_subm 1..4:/#.
+qed.
+
+lemma tovectors_addm (m1 m2: matrix):
+    size m1 = size m2 =>
+    toRowVectors (m1 + m2) = map (fun (v: vector * vector) => v.`1 + v.`2) (zip (toRowVectors m1) (toRowVectors m2)).
+proof.
+move => [#] hr hc.
+rewrite /toRowVectors rows_addm.
+rewrite  zip_map !hr zipss.
+rewrite -!map_comp /(\o) /=.
+congr.
+smt(rowD).
+qed.
 
 clone LWE_correctness as LWE_correctness with
   type LWE_.seed <- matrix,
@@ -129,7 +235,8 @@ clone LWE_correctness as LWE_correctness with
     LWE_.gt0_mb by done,
     LWE_.H_mem,
     LWE_.H_rows,
-    LWE_.H_cols.
+    LWE_.H_cols,
+    good_m_decode.
 
 realize m_encode_rows.
 proof.
@@ -162,6 +269,58 @@ move => *.
 smt(cols_subm).
 qed.
 
+realize good_m_decode.
+proof.
+move => m e ?.
+rewrite /m_encode /=.
+pose m'vs := map oflist (chunk Nb _).
+pose m' := ofcols _ _ _.
+rewrite /m_decode /matrix_tolist /=.
+rewrite subm_addm //.
+pose e' := subm e 0 Mb 0 Nb.
+rewrite -(cancel_ofcols_toRowVectors e') rows_subm cols_subm /=.
+rewrite -submT subm_ofcols 1,2://.
++ admit.
++ admit.
+rewrite -trmxD toRowVectors_trmx !lez_maxr 1,2://.
+rewrite ofcols_add 1,2://.
++ admit.
++ admit.
++ admit.
++ admit.
+
+rewrite cancel_toColVectors_ofcols 1,2://.
++ admit.
++ admit.
+
+pose v := fun i => nth witness m'vs i + nth witness (toRowVectors e') i.
+
+rewrite /tolist.
+rewrite map_flatten -!map_comp /(\o) /= .
+
+have -> : (fun x => map (fun c => int2bs B (dc c)) (map (get (v x)) (range 0 (size (v x)))))
+     = (fun x => map (fun i => int2bs B (dc (get (v x) i))) (range 0 Mb)).
++ admit.
+
+rewrite /=.
+rewrite /flatten.
+rewrite foldr_map /=.
+
+have -> : (fun x z => map (fun i => int2bs B (dc (v x).[i])) (range 0 Mb) ++ z)
+        = (fun x z => map (fun i => int2bs B (dc (ZR.(+) (nth witness m'vs x).[i] (nth witness (toRowVectors e') x).[i]))) (range 0 Mb) ++ z).
+        rewrite fun_ext => x.
+        rewrite fun_ext => z.
+        congr. congr.
+        rewrite fun_ext => i.
+        congr. congr. by rewrite get_addv.
+
+
+rewrite /m'vs.
+pose vs := chunk _ _.
+admit.
+qed.
+
+
 end FrodoPKE.
 
 clone import ZModRing as Zq with
@@ -181,9 +340,3 @@ clone FrodoPKE as FrodoPKE_ with
   op dc <- dc,
   theory DM.ZR <- ZModpRing
   proof *.
-
-realize LWE_correctness.good_m_decode.
-proof.
-move => m e.
-admit. 
-qed.
