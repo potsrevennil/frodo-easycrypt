@@ -582,9 +582,11 @@ op noise_exp_val (s s' e e' e'': matrix) = s' * e + e'' - e'* s.
 
 op max_noise : int.
 op under_noise_bound : matrix -> int -> bool.
+op valid_plaintext: plaintext -> bool.
 
 axiom good_c_decode c: c_decode (c_encode c) = c.
 axiom good_m_decode m n :
+  valid_plaintext m =>
   under_noise_bound n max_noise =>
   m_decode (m_encode m + n) = m.
 
@@ -627,6 +629,8 @@ module CorrectnessBound = {
 (* correctness *)
 section.
 declare module A <: CORR_ADV  {-LWE_PKE_HASH_PRG}.
+declare axiom A_valid_guess:
+  hoare[A.find: true ==> valid_plaintext res].
 
 lemma corr_proc &m :
     Pr[Correctness_Adv(LWE_PKE_HASH, A).main() @ &m: res] -
@@ -670,8 +674,8 @@ proof.
 byequiv => //.
 proc. inline *.
 swap {1} 10 -7; swap {1} [11..12] -6.
-seq 9 10: (
-  ={sd, s, s', e, e', e'', m} /\
+seq 8 9: (
+  ={glob A, sd, s, s', e, e', e'', sk, pk} /\
   pk{1} = pk_encode (sd{1}, t{1}) /\
   sk{1} = sk_encode s{1} /\
   t{1} = H sd{1} n n * s{1} + e{1} /\
@@ -681,21 +685,22 @@ seq 9 10: (
   e'{1} \in dmatrix Chi mb n /\
   e''{1} \in dmatrix Chi mb nb /\
   e{1} \in dmatrix Chi n nb
-).
-+ call (_:true); auto => />.
-
-auto => /> &2.
-rewrite !supp_dmatrix // => ? ? ? ? ?.
-rewrite pk_encodeK sk_encodeK.
-rewrite /noise_exp /= [_+m_encode _]addmC -addmA.
-pose x := _ * (H _ n n * _ + _) + _ - _.
-apply Logic.contra.
-rewrite [_+x-_]addmC addmA addNm m_encode_rows m_encode_cols.
-rewrite -cancel_mb_nb_add0m.
-+ rewrite /x mulmxDr mulmxDl oppmD.
-  rewrite ?rows_addm ?rows_neg ?rows_mulmx ?cols_addm ?cols_neg ?cols_mulmx /=.
-  rewrite /#.
-by apply good_m_decode.
+); auto => />.
+call (_: ={glob A, sk, pk} ==> ={glob A, res} /\ valid_plaintext res{1}).
++ conseq (_: ={glob A, sk, pk} ==> ={glob A, res}) (_:true ==> valid_plaintext res) (_: true ==> valid_plaintext res) => />;
+  1,2: apply A_valid_guess; sim.
++ auto => //= /> &2.
+  rewrite !supp_dmatrix // => ? ? ? ? ? ? ?.
+  rewrite pk_encodeK sk_encodeK.
+  rewrite /noise_exp /= [_+m_encode _]addmC -addmA.
+  pose x := _ * (H _ n n * _ + _) + _ - _.
+  apply Logic.contra.
+  rewrite [_+x-_]addmC addmA addNm m_encode_rows m_encode_cols.
+  rewrite -cancel_mb_nb_add0m.
+  + rewrite /x mulmxDr mulmxDl oppmD.
+    rewrite ?rows_addm ?rows_neg ?rows_mulmx ?cols_addm ?cols_neg ?cols_mulmx /=.
+    rewrite /#.
+  by apply good_m_decode.
 qed.
 
 lemma matrix_cancel (x y z: matrix): x = y => x + z = y + z.
