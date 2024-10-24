@@ -29,8 +29,11 @@ op D : { int | 0 < D <= 16 } as D_bound.
 op q : int = 2^D. 
 op B : { int | 0 < B <= D } as B_bound.
 
-hint exact: gt0_N gt0_Nb gt0_Mb D_bound B_bound.
-hint simplify (gt0_N, gt0_Nb, gt0_Mb, D_bound, B_bound).
+lemma gt0_B: 0 < B.
+proof. by smt(B_bound). qed.
+
+hint exact: gt0_N gt0_Nb gt0_Mb D_bound B_bound gt0_B.
+hint simplify (gt0_N, gt0_Nb, gt0_Mb, D_bound, B_bound, gt0_B).
 op CDF_table: int list.
 
 op lenSE: { int | 0 <= lenSE } as ge0_lenSE.
@@ -43,11 +46,20 @@ abbrev mask5f = W8.of_int 95 (* 95 = 0x5f *).
 abbrev mask96 = W8.of_int 150 (* 150 = 0x96 *).
 
 clone DynMatrix as DM.
+clone Dmatrix as Dmatrix_ with
+  theory DM <- DM.
 
 section.
 
 import DM.
 import DM.ZR.
+import Dmatrix_.
+
+op toRowVectors (m: matrix): vector list =
+  map (row m) (range 0 (rows m)).
+
+op toColVectors (m: matrix): vector list =
+  map (col m) (range 0 (cols m)).
 
 op sample (r: bool list): R =
   let r' = take (size CDF_table) r in
@@ -77,130 +89,229 @@ op prg_enc (r: bool list): (matrix * matrix * matrix) =
   let e'' = sample_matrix (drop (2*Mb*N*lenX) rs) Mb Nb in
   (s', e', e'').
 
+lemma chunknil ['a] x: chunk x [<:'a>] = [<:'a list>].
+proof.
+rewrite /chunk /=.
+exact mkseq0.
+qed.
+
+hint simplify chunknil.
+
 op ec (k: int): R = ZR.ofint (k * q %/ (2^B)).
-
-op m_encode (pt: bool list): matrix =
-  let pt' = chunk B (take (B*Mb*Nb) pt) in
-  let ks = map (fun bs => ec (bs2int bs)) pt' in
-  let vs = map oflist (chunk Nb ks) in
-  trmx (ofcols Nb Mb vs).
-
 op dc (c : R): int.
 
-op toRowVectors (m: matrix): vector list =
-  map (row m) (range 0 (rows m)).
+op max_noise: int.
+op under_noise_bound : R -> int -> bool.
 
-op toColVectors (m: matrix): vector list =
-  map (col m) (range 0 (cols m)).
+axiom good_dc (k: int) (e: R):
+     0 <= k < (2^B)
+  => under_noise_bound e max_noise
+  => dc (ec k + e) = k.
 
-lemma cancel_toColVectors_ofcols (vs: vector list) r c: 
-    0 <= r => 0 <= c =>
-    all (fun (v: vector) => size v = r) vs =>
-    size vs = c =>
-    toColVectors (ofcols r c vs) = vs.
+op m_encode_B (pt: bool list list) (c: int): matrix =
+  let ks = map (fun bs => ec (bs2int bs)) pt in
+  offunm (fun i j => nth witness ks (i * c + j), size pt %/ c, c).
+
+op m_decode_B (m: matrix): bool list list =
+  let dc' = fun c => int2bs B (dc c) in
+  map dc' (flatten (map tolist (toRowVectors m))).
+
+lemma good_m_decode_B0 (e: matrix) c:
+    forall r,
+    c <= 0 =>
+    size e = (r, c) =>
+    m_decode_B (m_encode_B [] c + e) = [].
 proof.
-move => ? ? h ?.
-rewrite /toColVectors.
-rewrite cols_offunm lez_maxr 1://.
-apply (eq_from_nth witness).
-+ rewrite size_map size_range => /#.
-+ move => i [#].
-  rewrite size_map size_range /= => *.
-  rewrite (nth_map witness witness) 1:size_range 1:/# nth_range 1:/#.
-  rewrite eq_vectorP.
-  rewrite size_col rows_offunm lez_maxr 1://.
-  have -> /= : size (nth witness vs i) = r; 1: by smt(List.allP mem_nth).
-  move => j [#] *.
-  by rewrite get_offunm 1:/#.
+move => ? [#] *.
+rewrite /m_encode_B /m_decode_B /=.
+rewrite -size_eq0 size_map.
+rewrite -map_comp !rows_offunm /=.
+rewrite (EclibExtra.size_flatten' 0). 
++ move => ?.
+  rewrite mapP.
+  case => ? [#] /= ? ->.
+  rewrite size_tolist size_row cols_addm cols_offunm. 
+  smt().
++ smt().  
 qed.
 
-lemma cancel_ofcols_toColVectors (m: matrix):
-    ofcols (rows m) (cols m) (toColVectors m) = m.
+lemma splitP (pt: 'a list) r c : 0 <= r => 0 <= c =>
+    size pt = (r + 1) * (c + 1) =>
+    (head witness pt :: take c (behead pt)) ++ drop (c+1) pt = pt.
 proof.
-rewrite eq_matrixP.
-rewrite rows_offunm cols_offunm => /> i j *.
-rewrite get_offunm 1:/# /=.
-rewrite /toColVectors (nth_map witness) 1:size_range 1:/#.
-by rewrite get_offunv 1:/# /= nth_range 1:/#.
+move => ? ? hpt.
+have <- := EclibExtra.behead_take (c+1) pt. 
+have -> : head witness pt = head witness (take (c+1) pt); 1: by smt().
+rewrite (head_behead _ witness) 1:/#.
+rewrite cat_take_drop => /#.
 qed.
 
-lemma toRowVectors_trmx m:
-    toRowVectors (trmx m) = toColVectors m.
+lemma good_m_decode_B (pt: bool list list) (e: matrix) c:
+    forall (r: int),
+    0 < r =>
+    size pt = r * c =>
+    all (fun (bs: bool list) => size bs = B) pt =>
+    size e = (r, c) =>
+    (forall i j, mrange e i j => under_noise_bound e.[i,j] max_noise) =>
+    m_decode_B (m_encode_B pt c + e) = pt.
 proof.
-rewrite /toRowVectors /toColVectors /=.
-smt(row_trmx).
-qed.
+move :c pt e.
+elim /natind.
++ move => c ? pt e r ? h0 ? [#] h1 ?.
+  have -> : pt = [].
+  + rewrite -size_eq0.
+    apply ler_asym.
+    rewrite size_ge0 /= h0 -h1.
+    rewrite mulr_ge0_le0 1:rows_ge0 1://.
+  by rewrite (good_m_decode_B0 _ _ r).
++ move => c ? h_rec0 pt e r.
+  move :r pt e.
+  elim /natind => [r |r ? h_rec1 pt e ?].
+  + smt().
+  + rewrite /m_decode_B /m_encode_B -!map_comp /(\o) /=.
+    rewrite !rows_offunm allP /= => ^ hpt0 -> hpt1 he ?.
+    rewrite mulzK 1:addz1_neq0 1,2://.
+    pose vs := map _ (range _ _).
+    have hvs0 : all (fun (v: R list) => size v = c + 1) vs.
+    + rewrite allP => ?.
+      rewrite mapP.
+      case => ? [#] /= ? ->.
+      by rewrite size_tolist size_row cols_addm cols_offunm => /#.
+    have hvs1 : size (flatten vs) = (r+1) * (c+1).
+    + rewrite (EclibExtra.size_flatten' (c+1)) 1:-allP 1://. 
+      rewrite size_map size_range.
+      smt().
+  have hp : size (head witness pt) = B; 1: by apply hpt1 => /#.
+  have <- := splitP pt r c _ _ _; 1..3 : trivial.
 
-lemma cancel_ofcols_toRowVectors (m: matrix):
-    trmx (ofcols (cols m) (rows m) (toRowVectors m)) = m.
-proof.
-rewrite -{3}(trmxK m) -{4}(trmxK m).
-apply congr1.
-rewrite toRowVectors_trmx.
-exact cancel_ofcols_toColVectors.
-qed.
+  have <- : head witness (map (fun c => int2bs B (dc c)) (flatten vs)) = head witness pt.
+  + rewrite -nth0_head (nth_map witness) /= 1:/# (nth_flatten witness (c+1)) 1:// /=.
+    rewrite (nth_map witness) 1:size_range 1:/# nth_range 1:/# /=.
+    rewrite (nth_tolist witness) 1:/= 1:!cols_offunm 1:/# get_row.
+    do 2! rewrite get_offunm 1:/# /=.
+    rewrite (nth_map witness) 1:/# nth0_head /= good_dc.
+    + by rewrite bs2int_ge0 -hp bs2int_le2Xs.
+    + smt().
+    by rewrite -hp bs2intK /=.
 
-lemma subm_ofcols (vs: vector list) r c:
-    0 <= c => 0 <= r =>
-    all (fun (v: vector) => size v = r) vs =>
-    size vs = c =>
-    subm (ofcols r c vs) 0 r 0 c = ofcols r c vs.
-proof.
-move => *.
-rewrite eq_matrixP.
-rewrite size_subm rows_offunm cols_offunm /= => i j [#] *.
-by rewrite get_subm 1,2:/#.
+  have <- : take c (behead (map (fun c => int2bs B (dc c)) (flatten vs))) = take c (behead pt). 
+  + rewrite EclibExtra.behead_map.
+    have <- := h_rec0 (take c (behead pt)) (subm e 0 1 1 (c+1)) 1 _ _ _ _ _; 1:trivial.
+    + by rewrite size_take 1:// EclibExtra.size_behead => /#.
+    + rewrite allP => /= *.
+      by apply /hpt1/mem_behead/(mem_take c).
+    + by rewrite size_subm => /#.
+    + by move => i j; smt(get_subm).
+
+    rewrite /m_encode_B /m_decode_B /= -!map_comp /(\o) /= !rows_offunm size_take 1:// !EclibExtra.size_behead hpt0.
+    have ^ hc -> : (if c < max 0 ((r+1)*(c+1)-1) then c else max 0 ((r+1)*(c+1)-1)) = c; 1: by smt().
+    rewrite divzz.
+    pose vs' := map _ (range _ _).
+    have hvs'0 : all (fun (v: R list) => size v = c) vs'.
+    + rewrite allP => /= ?.
+      rewrite mapP.
+      case => ? [#] /= ? ->.
+      rewrite size_tolist size_row !cols_offunm => /#.
+    have hvs'1 : size vs' = 1.
+    + rewrite size_map size_range => /#.
+    have hvs'2 : size (flatten vs') = c.
+    + rewrite (EclibExtra.size_flatten' c) 1:-allP 1,2:/#.
+
+    apply (eq_from_nth witness).
+    + by rewrite size_take 1:// !size_map EclibExtra.size_behead hvs1 hvs'2 hc.
+    + move => i [#].
+      rewrite size_take 1:// size_map EclibExtra.size_behead hvs1 hc /= => *.
+      rewrite nth_take 1,2://.
+      rewrite !(nth_map witness) 1:EclibExtra.size_behead 1,2:/# /=.
+      congr. congr.
+      rewrite nth_behead 1://.
+      rewrite (nth_flatten witness (c+1)) 1://.
+      rewrite (nth_flatten witness c) 1://.
+      rewrite !pdiv_small 1,2:/# !modz_small 1,2:/#.
+      rewrite !(nth_map witness) 1..4:size_range 2,4: size_row 2,4:!cols_offunm 1..4:/# /=.
+      rewrite !nth_range 2,4: !cols_offunm 1..4: /# /=.
+      rewrite !get_offunm 1,2:!rows_offunm 1,2:!cols_offunm 1,2:/# /=.
+      rewrite !get_offunm 1,2:!rows_offunm 1,2:!cols_offunm 1..3:/# /=.
+      rewrite !(nth_map witness) 2: size_take 3: EclibExtra.size_behead 1..3:/#.
+      congr. congr. rewrite nth_take 1,2://.
+      by rewrite nth_behead 1://.
+
+  have <- : drop (c+1) (map (fun c => int2bs B (dc c)) (flatten vs))
+         = drop (c+1) pt.
+  + case (r = 0) => *.
+    + subst r.
+      by rewrite !drop_oversize 1:size_map 1,2:/#.
+    + have <- := h_rec1 (drop (c+1) pt) (subm e 1 (r+1) 0 (c+1)) _ _ _ _ _; 1: by smt().
+      + rewrite size_drop 1,2:/#.
+      + by rewrite allP /= => *; apply /hpt1/(mem_drop (c+1)).
+      + rewrite size_subm /#.
+      + move => i j. rewrite rows_subm cols_subm /= => [#] *. rewrite get_subm 1,2:/# /#.
+
+      rewrite /m_encode_B /m_decode_B -map_comp /(\o) /=.
+      rewrite !rows_offunm size_drop 1:/#.
+      have h0 : (r+1)*(c+1) - (c+1) = r * (c+1); 1: by smt().
+      have -> : (max 0 (size pt - (c+1)) %/ (c+1)) = r.
+      + rewrite hpt0 h0 => /#.
+
+      pose vs' := map _ (range _ _).
+      have hvs'0 : all (fun (v: R list) => size v = c + 1) vs'.
+      + rewrite allP /= => ?.
+        rewrite mapP.
+        case => ? /= [#] ? ->.
+        rewrite size_tolist size_row !cols_offunm => /#.
+      have hvs'1 : size vs' = r.
+      + by rewrite size_map size_range /#.
+      have hvs'2 : size (flatten vs') = r * (c+1).
+      + by rewrite (EclibExtra.size_flatten' (c+1)) 1:-allP 1:// hvs'1 => /#.
+  
+      apply (eq_from_nth witness).
+      + rewrite size_drop 1:/# !size_map hvs1 hvs'2 => /#.
+      + move => i [#].
+        rewrite size_drop 1:/# size_map hvs1 h0 lez_maxr 1:/# => *.
+        rewrite nth_drop 1:/# 1://.
+        rewrite !(nth_map witness) 1,2:/# /=.
+        congr. congr.
+        rewrite !(nth_flatten witness (c+1)) 1,2://.
+        rewrite dvdz_modzDl 1:dvdzz.
+        rewrite divzDl 1:dvdzz.
+        have -> : (c+1) %/ (c+1) = 1; 1: by smt(divzz).
+        have ?: i %/ (c+1) < r; 1: by rewrite ltz_divLR 1:/#.
+        rewrite !(nth_map witness) 1..4:size_range 2,4:size_row 2,4:!cols_offunm 1..4:/# /=.
+        rewrite !cols_offunm !nth_range 1..4:/# /=.
+        rewrite !get_offunm 1,2:!rows_offunm 1,2:!cols_offunm 1,2:/# /=.
+        rewrite !get_offunm 1,2:!rows_offunm 1,2:!cols_offunm 1..3:/# /=.
+        congr; 2: smt().
+        rewrite !(nth_map witness) 2:size_drop 1..3:/# /=.
+        congr. congr.
+        rewrite nth_drop 1,2:/# => /#.
+  by rewrite (splitP _ r c) 3:size_map 1..3://.  
 qed.
     
-lemma ofcols_add (vs1 vs2: vector list) r c:
-    0 <= r =>
-    0 <= c =>
-    size vs1 = c =>
-    size vs2 = c =>
-    all (fun (v: vector) => size v = r) vs1 =>
-    all (fun (v: vector) => size v = r) vs2 =>
-    ofcols r c vs1 + ofcols r c vs2 = ofcols r c (map (fun i => nth witness vs1 i + nth witness vs2 i) (range 0 c)).
-proof.
-admit.
-qed.
+
+
+op m_encode (pt: bool list): matrix =
+  m_encode_B (chunk B (take (B*Mb*Nb) pt)) Nb.
 
 op m_decode (m: matrix): bool list =
-  let dc' = fun c => int2bs B (dc c) in
-  flatten (map dc' (flatten (map tolist (toRowVectors (subm m 0 Mb 0 Nb))))).
+  flatten (m_decode_B m).
 
-axiom good_dc (k: int) (e: R) (p: R -> bool):
-     0 <= k < (2^B)
-  => p e
-  => dc (ec k + e) = k.
+lemma good_m_decode (pt: bool list) (e: matrix):
+  (forall i j, mrange e i j => under_noise_bound e.[i,j] max_noise) =>
+  m_decode (m_encode pt + e) = pt.
+proof.
+move => ?.
+rewrite /m_encode /m_decode. 
+pose pt' := chunk _ _.
+rewrite (good_m_decode_B pt' e Nb Mb) 1,5://.
++ admit.
++ admit.
++ admit.
++ admit.
+qed.
 
 end section.
 
 import DM.
-
-lemma subm_addm (m n: matrix) r1 r2 c1 c2:
-    0 <= r1 =>
-    r1 <= r2 =>
-    0 <= c1 =>
-    c1 <= c2 =>
-    subm (m + n) r1 r2 c1 c2 = subm m r1 r2 c1 c2 + subm n r1 r2 c1 c2.
-proof.
-move => *.
-rewrite eq_matrixP size_addm !size_subm => /> i j *.
-rewrite get_subm 1,2:/#.
-by rewrite !get_addm !get_subm 1..4:/#.
-qed.
-
-lemma tovectors_addm (m1 m2: matrix):
-    size m1 = size m2 =>
-    toRowVectors (m1 + m2) = map (fun (v: vector * vector) => v.`1 + v.`2) (zip (toRowVectors m1) (toRowVectors m2)).
-proof.
-move => [#] hr hc.
-rewrite /toRowVectors rows_addm.
-rewrite  zip_map !hr zipss.
-rewrite -!map_comp /(\o) /=.
-congr.
-smt(rowD).
-qed.
 
 clone LWE_correctness as LWE_correctness with
   type LWE_.seed <- matrix,
@@ -240,14 +351,12 @@ clone LWE_correctness as LWE_correctness with
 
 realize m_encode_rows.
 proof.
-rewrite /m_encode /= => *.
-smt(cols_offunm gt0_Mb).
+admit.
 qed.
 
 realize m_encode_cols.
 proof.
-rewrite /m_encode /= => *.
-smt(rows_offunm gt0_Nb).
+admit.
 qed.
 
 realize LWE_.H_mem.
@@ -271,52 +380,6 @@ qed.
 
 realize good_m_decode.
 proof.
-move => m e ?.
-rewrite /m_encode /=.
-pose m'vs := map oflist (chunk Nb _).
-pose m' := ofcols _ _ _.
-rewrite /m_decode /matrix_tolist /=.
-rewrite subm_addm //.
-pose e' := subm e 0 Mb 0 Nb.
-rewrite -(cancel_ofcols_toRowVectors e') rows_subm cols_subm /=.
-rewrite -submT subm_ofcols 1,2://.
-+ admit.
-+ admit.
-rewrite -trmxD toRowVectors_trmx !lez_maxr 1,2://.
-rewrite ofcols_add 1,2://.
-+ admit.
-+ admit.
-+ admit.
-+ admit.
-
-rewrite cancel_toColVectors_ofcols 1,2://.
-+ admit.
-+ admit.
-
-pose v := fun i => nth witness m'vs i + nth witness (toRowVectors e') i.
-
-rewrite /tolist.
-rewrite map_flatten -!map_comp /(\o) /= .
-
-have -> : (fun x => map (fun c => int2bs B (dc c)) (map (get (v x)) (range 0 (size (v x)))))
-     = (fun x => map (fun i => int2bs B (dc (get (v x) i))) (range 0 Mb)).
-+ admit.
-
-rewrite /=.
-rewrite /flatten.
-rewrite foldr_map /=.
-
-have -> : (fun x z => map (fun i => int2bs B (dc (v x).[i])) (range 0 Mb) ++ z)
-        = (fun x z => map (fun i => int2bs B (dc (ZR.(+) (nth witness m'vs x).[i] (nth witness (toRowVectors e') x).[i]))) (range 0 Mb) ++ z).
-        rewrite fun_ext => x.
-        rewrite fun_ext => z.
-        congr. congr.
-        rewrite fun_ext => i.
-        congr. congr. by rewrite get_addv.
-
-
-rewrite /m'vs.
-pose vs := chunk _ _.
 admit.
 qed.
 
