@@ -47,6 +47,8 @@
                 direnv
                 nix-direnv
 
+                texliveFull
+
                 why3;
             };
 
