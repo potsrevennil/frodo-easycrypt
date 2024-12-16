@@ -1,0 +1,237 @@
+% !TEX root = ./main.tex
+
+We now briefly discuss the mechanized reasoning tools we use for our 
+proofs and give an overview of \mlkem and how it evolved from \kyber.
+The cryptographic definitions and notation we use are fairly standard
+and are given in~\cite{fullversion}.
+
+\subsection{The EasyCrypt proof assistant}
+\label{subsec:easycrypt}
+
+EasyCrypt\footnote{\url{https://easycrypt.info}}~\cite{Barthe2014} is a proof
+assistant for formalizing proofs of cryptographic properties.
+%%
+Its primary feature is the Probabilistic Relational Hoare Logic (pRHL), which
+we use throughout to prove equivalences between games, sometimes conditioned by
+the non-occurrence of a failure event. We call such conditional equivalence
+steps \emph{up-to-bad} reasoning in later section.
+%%
+pRHL is designed to support reasoning about equivalences of probabilistic
+programs while reasoning only locally (within oracles) and without reasoning
+about the distribution of specific variables---essentially keeping track only
+of the fact that variables in one program are distributed identically to
+variables in the other, but not keeping track of what that distribution may be.
+%%
+This logic has proved highly expressive for the bulk of cryptographic proof
+work. However, some steps require more global reasoning (about the entire
+execution) or keeping track of the distribution of individual variables. 
+%%
+Logical rules to support such reasoning steps are implemented in EasyCrypt, but
+are often unwieldy to apply in concrete context. The EasyCrypt team has, over
+the years, developed a number of generic libraries that abstract those more
+complex reasoning rules into ``game transformations'' or equivalence results
+that can be instantiated as part of other proofs.
+
+Our proof makes extensive use of three of those generic libraries, which we
+outline below and discuss more in depth 
+in~\cite{fullversion}:
+\begin{description}
+  \item[plug-and-pray] provides a formalized generic argument for bounding the
+    security loss of reductions that guess an instance, session or query (among
+    a bounded-sized set) will lead to a successful run;
+  \item[hybrid] provides a formalized and generic argument for bounding the
+    distance between two games that differ only in one oracle, but where the
+    transition must be done query-by-query for the purpose of the proof;
+  \item[PROM] provides a generic argument, initially intended to apply to
+    programmable random oracles, that encapsulates the widely used argument
+    that a ``value is random and independent of the adversary's view''.
+\end{description}
+
+\subsection{Background on \mlkem}
+\label{sec:kyber_to_mlkem}
+
+\subheading{From \kyber to \mlkem.}
+The original NIST PQC round-1 submission of
+\kyber described the scheme as a two-stage construction consisting of
+a module-lattice instantiation of the IND-CPA-secure LPR encryption
+scheme~\cite{EC:LyuPeiReg10,Eurocrypt2010PeikertSlides} and a
+\emph{``slightly tweaked''} Fujisaki-Okamoto (FO) transform~\cite{C:FujOka99,JC:FujOka13} 
+to build an IND-CCA-secure KEM. 
+The reduction linking IND-CPA security of the encryption scheme to MLWE 
+was not spelled out in the NIST submission document.  
+For the proof of IND-CCA security of the full scheme the
+submission mostly referred to previous work on the security of the FO
+transform, most notably~\cite{TCC:HofHovKil17} and \cite{EPRINT:SaiXagYam17}.
+Less than two months after the submission documents were made public,
+D'Anvers pointed out\footnote{See \url{https://groups.google.com/a/list.nist.gov/g/pqc-forum/c/PX_Wd11BecI}.}
+that there are major obstacles to
+proving IND-CPA security from MLWE in \kyber.  The reason is that
+unlike the original LPR scheme, round-1 \kyber included a
+public-key-compression step, which invalidates an assumption in the
+LPR proof. As a consequence, the \kyber submission team decided to
+tweak the submission for round 2 of NIST PQC by removing the
+public-key compression (and adjusting some other parameters to obtain
+similar performance); some more tweaks to parameters were proposed for
+the round-3 version of \kyber.
+
+\begin{algorithm}[tb]
+  \caption{$\kpke.\PKEGen()$: key generation}
+  \label{alg:gen}
+  \begin{algorithmic}[1]
+    \Ensure Secret key $\sk \in \Rq^k$ and public key $\pk \in \hat{\Rq}^k \times \{0,1\}^{256}$
+    \State $d \getsr \{0,1\}^{256}$
+    \State $(\rho,\sigma) \gets \ROG(d)$
+    \State $\hat{\Apo} \gets \Parse(\XOF(\rho))$
+    \State $\spo, \epo \gets \CBD_{\eta_1}(\PRF_\sigma)$ \Comment{$\spo, \epo \in \Rq^k$}
+    \State $\hat{\spo} \gets \NTT(\spo)$
+    \State $\hat{\epo} \gets \NTT(\epo)$
+    \State $\hat{\tpo} \gets \hat{\Apo} \pw \hat{\spo} + \hat{\epo}$
+    \State \Return $\sk = \hat{\spo}$ and $\pk=(\hat{\tpo},\rho)$
+  \end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[tb]
+  \caption{$\kpke.\PKEEnc(\pk, m)$: encryption}
+  \label{alg:enc}
+  \begin{algorithmic}[1]
+    \Require Public key $\pk  = (\hat{\tpo}, \rho) \in \Rq^k \times \{0,1\}^{256}$, message $m \in \{0,1\}^{256}$
+    \Ensure Ciphertext $c \in \R_{d_u}^k \times \R_{d_v}$
+    \State $r \getsr \{0,1\}^{256}$
+    \State $\hat{\Apo} \gets \Parse(\XOF(\rho))$
+    \State $\rpo \gets \CBD_{\eta_1}(\PRF_r)$ \Comment{$\rpo \in \Rq^k$}
+    \State $\epo_1, e_2 \gets \CBD_{\eta_2}(\PRF_r)$ \Comment{$\epo_1 \in \Rq^k, e_2 \in \Rq$}
+    \State $\hat{\rpo} \gets \NTT(\rpo)$\label{line:kybercpa-enc:nttr}
+    \State $\upo \gets \INVNTT(\hat{\Apo}^T \pw \hat{\rpo}) + \epo_1$
+    \State $v \gets \INVNTT(\hat{\tpo}^T\pw\hat{\rpo}) + e_2 + \ToPoly(m)$ 
+    \State $\cpo_1 \gets \KyberCompress(\upo, d_u)$
+    \State $c_2 \gets \KyberCompress(v, d_v)$
+    \State \Return $c = (\cpo_1, c_2)$
+  \end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[tb]
+  \caption{$\kpke.\PKEDec(\sk,c)$: decryption}
+  \label{alg:dec}
+  \begin{algorithmic}[1]
+    \Require Secret key $\sk = \hat{\spo} \in \Rq^k$ and ciphertext $c = (\cpo_1, c_2)\in \R_{d_u}^k \times \R_{d_v}$
+    \Ensure Message $m \in \{0,1\}^{256}$
+    \State $\tilde{\upo} \gets \KyberDecompress(\cpo_1, d_u)$
+    \State $\tilde{v} \gets \KyberDecompress(c_2, d_v)$
+    \State $m \gets \ToMsg(\tilde{v}-\INVNTT(\hat{\spo}^T\pw\NTT(\tilde{\upo})))$
+    \State \Return $m$
+\end{algorithmic}
+\end{algorithm}
+
+Through the further course of the NIST PQC project, issues were
+identified also in the second part of \kyber's security argument, 
+which establishes IND-CCA security through a ``tweaked'' FO transform.  
+It turned out that existing QROM proofs of the FO transform,
+e.g., from~\cite{TCC:HofHovKil17}, did not apply and that proving the particular
+variant of the FO transform is not straightforward~\cite[Sec.~5.4]{EC:GruMarPat22}. 
+Although \kyber's variant of the FO transform was eventually proven
+secure~\cite{PKC:MarXag23,EPRINT:BarHul23}, NIST decided, 
+after discussion on the pqc-forum mailing list, 
+to revert to a more ``vanilla'' version of the FO
+transform for \mlkem.
+
+Our mechanized proof validates the final outcome of these evolutions, 
+which led to the draft specification of \mlkem. 
+In our models we do \emph{not} include
+the public-key validation step at the beginning of encapsulation, 
+which NIST introduced in the \mlkem draft standard. 
+The reason is that, as far as we know, this is the last major 
+open discussion topic for the final standard and it seems rather 
+unlikely that it will be included in the final version of \mlkem.
+
+\subheading{Technical description of \mlkem.}
+We give high-level algorithmic descriptions of \kpke, 
+the IND-CPA-secure public-key encryption scheme underlying \mlkem,
+in \cref{alg:gen,alg:enc,alg:dec} and of the full IND-CCA-secure KEM
+in \cref{alg:ccagen,alg:ccaenc,alg:ccadec}. For a more implementation-oriented description 
+that operates on byte arrays, see \cite[Algs.~12--14]{fips203}.
+
+\mlkem works in the ring $\Rq = \Zq[X]/(X^n + 1)$ with $q=3329$ and $n=256$.
+The core operations are on small-dimension vectors and matrices over $\Rq$;
+the dimension depends on the parameter $k$, which is different for different
+parameter sets of \mlkem: 
+\mlkem (NIST security level 1) uses $k=2$,
+\mlkem (NIST security level 3) uses $k=3$, and
+\mlkem (NIST security level 5) uses $k=4$.
+We denote elements in $\Rq$ with regular lower-case letters (e.g., $v$);
+vectors over $\Rq$ with bold-face lower-case letters (e.g., $\upo$),
+and matrices over $\Rq$ with bold-face upper-case letters (e.g., $\Apo$).
+
+
+\begin{algorithm}[tb]
+  \caption{$\mlkem.\KEMGen()$: key generation}
+  \label{alg:ccagen}
+  \begin{algorithmic}[1]
+    \Ensure Secret key $\sk = (\sk', \pk, \ROH(\pk), z) \in \Rq^k \times (\hat{\Rq}^k \times \{0,1\}^{256}) \times \{0,1\}^{256} \times \{0,1\}^{256}$ and public key $\pk \in \hat{\Rq}^k \times \{0,1\}^{256}$
+    \State $(\pk,\sk') \gets \kpke.\PKEGen()$
+    \State $z \gets \{0,1\}^{256}$
+    \State $\sk \gets (\sk'\cat \pk\cat \ROH(\pk)\cat z)$
+    \State \Return $(\sk, \pk)$
+  \end{algorithmic}
+\end{algorithm}
+
+
+\begin{algorithm}[tb]
+  \caption{$\mlkem.\KEMEnc(\pk)$: encapsulation}
+  \label{alg:ccaenc}
+  \begin{algorithmic}[1]
+    \Require Public key $\pk \in \hat{\Rq}^k \times \{0,1\}^{256}$
+    \Ensure Ciphertext $c \in \R_{d_u}^k \times \R_{d_v}$ and shared key $K \in \{0,1\}^{256}$
+    \State $m\gets \{0,1\}^{256}$
+    \State $(K,r) \gets \ROG(m\cat \ROH(\pk))$\Comment{$(K,r) \in \{0,1\}^{256} \times \{0,1\}^{256}$}
+    \State $c \gets \kpke.\PKEEnc(\pk, m, r)$
+    \State \Return $(c, K)$
+  \end{algorithmic}
+\end{algorithm}
+
+
+\begin{algorithm}[tb]
+  \caption{$\mlkem.\KEMDec(c,\sk)$: decapsulation}
+  \label{alg:ccadec}
+  \begin{algorithmic}[1]
+    \Require Ciphertext $c \in \R_{d_u}^k \times \R_{d_v}$ and secret key $\sk = (\sk', \pk, \ROH(\pk), z) \in \Rq^k \times (\hat{\Rq}^k \times \{0,1\}^{256}) \times \{0,1\}^{256} \times \{0,1\}^{256}$
+    \Ensure Shared key $K \in \{0,1\}^{256}$
+    \State $m'\gets \kpke.\PKEDec(\sk',c)$
+    \State $(K',r') \gets \ROG(m'\cat \ROH(\pk))$
+    \State $c' \gets \kpke.\PKEEnc(\pk, m', r')$
+    \State $K^- \gets \ROJ(z\cat c)$
+    \If{$c = c'$} \textbf{then} $K \gets K'$ \textbf{else} $K \gets K^-$\Comment{Requires branch-free conditional}
+    \EndIf 
+    \State \Return $K$
+  \end{algorithmic}
+\end{algorithm}
+
+
+
+
+In these descriptions, \XOF is an extendable output function that in 
+\mlkem is instantiated with SHAKE-128~\cite{fips202}. 
+\Parse interprets outputs of \XOF as sequence of $12$-bit unsigned integers 
+and runs rejection sampling to obtain coefficients that look uniformly random modulo $q$. 
+The function $\ROH$ is instantiated with SHA3-256, $\ROG$ is instantiated with SHA3-512
+and $\ROJ$ is instantiated with SHAKE256 with output length fixed to 32 bytes.
+$\CBD_\eta$ denotes sampling coefficients from a centered 
+binomial distribution with parameter $\eta$;\footnote{This means we have $B(n,p)$ with $p=1/2$, 
+$n=2\eta$ and expected value shifted to $0$.}
+extension from coefficients to (vectors of) polynomials is done by sampling each
+coefficient independently from $\CBD_\eta$. For example, \mlkemmid uses $\eta_1 = \eta_2 = 2$.
+The sampling routine is parameterized by a pseudorandom function $\PRF_k$ with key $k$.
+\NTT is the number-theoretic transform of a polynomial in $\Rq$. 
+Both input and output of \NTT can be written as a sequence of $256$ coefficients
+in $\Zq$ and typical implementations perform the transform inplace. 
+However, output coefficients do not have any meaning as a polynomial in $\Rq$.
+We therefore denote the output domain as $\hat{\Rq}$; we apply
+the same notation for elements in $\hat{\Rq}$, e.g., $\hat{u} = \NTT(u)$.
+Application of $\NTT$ to vectors and matrices over $\Rq$ is done element-wise.
+\KyberCompress compresses elements in $\Rq$ (or $\Rq^k)$ by rounding coefficients 
+to a smaller modulus $d_v$ (or $d_u$).
+\KyberDecompress is an approximate inverse of \KyberCompress.
+\ToPoly maps $256$-bit strings to elements in $\Rq$ by mapping a zero bit to
+a zero coefficient and mapping a one bit to a $\frac{q}{2}$ coefficient;
+\ToMsg rounds coefficients to bits to recover a message from a noisy version
+of a polynomial generated by \ToPoly.
+

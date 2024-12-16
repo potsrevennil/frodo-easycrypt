@@ -1,0 +1,128 @@
+% !TEX root = ./main.tex
+
+\newcommand{\Zq}{\ensuremath{\mathbb{Z}_q}\xspace}
+\newcommand{\Fq}{\ensuremath{\mathbb{F}_q}\xspace}
+\newcommand{\Rq}{\ensuremath{\mathcal{R}_q}\xspace}
+\newcommand{\R}{\ensuremath{\mathcal{R}}\xspace}
+
+\newcommand{\mlkem}{\text{{ML-KEM}}\xspace}
+\newcommand{\fips}{\text{{\sc FIPS 203 (Draft)}}\xspace}
+\newcommand{\kpke}{\text{{\sc K-PKE}}\xspace}
+
+\newcommand{\mlkemlow}{\mlkem-512\xspace}
+\newcommand{\mlkemmid}{\mlkem-768\xspace}
+\newcommand{\mlkemhigh}{\mlkem-1024\xspace}
+
+\newcommand{\kyber}{\text{{\sc Kyber}}\xspace}
+\newcommand{\kyberfull}{\text{{\sc CRYSTALS-Kyber}}\xspace}
+\newcommand{\dilithiumfull}{\text{{\sc CRYSTALS-Dilithium}}\xspace}
+\newcommand{\kyberlow}{\kyber-512\xspace}
+\newcommand{\kybermid}{\kyber-768\xspace}
+\newcommand{\kyberhigh}{\kyber-1024\xspace}
+\newcommand{\kybercpa}{\kyber.{\sf CPAPKE}\xspace}
+\newcommand{\kybercca}{\kyber.{\sf CCAKEM}\xspace}
+\newcommand{\kybercpacore}{\kyber.{\sf CPAPKE-Core}\xspace}
+\newcommand{\PKE}{\ensuremath{\mathsf{PKE}}}
+\newcommand{\PKEGen}{\ensuremath{\mathsf{KeyGen}}}
+\newcommand{\PKEEnc}{\ensuremath{\mathsf{Enc}}}
+\newcommand{\PKEDec}{\ensuremath{\mathsf{Dec}}}
+\newcommand{\KEMGen}{\ensuremath{\mathsf{KeyGen}}}
+\newcommand{\KEMEnc}{\ensuremath{\mathsf{Encap}}}
+\newcommand{\KEMDec}{\ensuremath{\mathsf{Decap}}}
+
+\newcommand{\pk}{\mathit{pk}}
+\newcommand{\sk}{\mathit{sk}}
+
+\newcommand{\modp}{\ensuremath{\text{ mod}^+}}
+\newcommand{\modpm}{\ensuremath{\text{ mod}^\pm}}
+
+\newcommand{\ROH}{\text{H}\xspace}
+\newcommand{\ROG}{\text{G}\xspace}
+\newcommand{\ROJ}{\text{J}\xspace}
+\newcommand{\XOF}{\ensuremath{\mathsf{XOF}}\xspace}
+\newcommand{\brev}{\mbox{\textsf{br}}\xspace}
+\newcommand{\NTT}{\mbox{\textsf{NTT}}\xspace}
+\newcommand{\INVNTT}{\ensuremath{\mbox{\textsf{NTT}}^{-1}}\xspace}
+\newcommand{\pw}{\ensuremath{\circ}}
+
+\newcommand{\cat}{\ensuremath{\Vert}}
+\newcommand{\Parse}{\ensuremath{\mathsf{Parse}}\xspace}
+\newcommand{\CBD}{\ensuremath{\mathsf{CBD}}\xspace}
+\newcommand{\ToPoly}{\ensuremath{\mathsf{ToPoly}}\xspace}
+\newcommand{\ToMsg}{\ensuremath{\mathsf{ToMsg}}\xspace}
+%\newcommand{\Encode}{\ensuremath{\mathsf{Encode}}\xspace}
+%\newcommand{\Decode}{\ensuremath{\mathsf{Decode}}\xspace}
+
+\newcommand{\hmlwe}{\text{{\sf HMLWE}}\xspace}
+\newcommand{\hmlwecpa}{\hmlwe.{\sf CPAPKE}\xspace}
+\newcommand{\hmlwecca}{\hmlwe.{\sf CCAKEM}\xspace}
+\newcommand{\hmlwecpacore}{\hmlwe.{\sf CPAPKE-Core}\xspace}
+
+\newcommand{\mlwe}{\text{{\sf MLWE}}\xspace}
+\newcommand{\mlwecpa}{\mlwe.{\sf CPAPKE}\xspace}
+\newcommand{\mlwecca}{\mlwe.{\sf CCAKEM}\xspace}
+\newcommand{\mlwecpacore}{\mlwe.{\sf CPAPKE-Core}\xspace}
+
+\newcommand{\PRF}{\ensuremath{\mathsf{PRF}}\xspace}
+\newcommand{\PRG}{\ensuremath{\mathsf{PRG}}\xspace}
+\newcommand{\KyberCompress}{\ensuremath{\mathsf{Compress}_q}\xspace}
+\newcommand{\KyberDecompress}{\ensuremath{\mathsf{Decompress}_q}\xspace}
+
+\newcommand{\Apo}{\mathbf{A}}
+\newcommand{\xpo}{\mathbf{x}}
+\newcommand{\ypo}{\mathbf{y}}
+\newcommand{\cpo}{\mathbf{c}}
+\newcommand{\vpo}{\mathbf{v}}
+\newcommand{\epo}{\mathbf{e}}
+\newcommand{\spo}{\mathbf{s}}
+\newcommand{\tpo}{\mathbf{t}}
+\newcommand{\rpo}{\mathbf{r}}
+\newcommand{\wpo}{\mathbf{w}}
+\newcommand{\upo}{\mathbf{u}}
+\newcommand{\dpo}{\mathbf{d}}
+\newcommand{\gpo}{\mathbf{g}}
+\newcommand{\fpo}{\mathbf{f}}
+\newcommand{\apo}{\mathbf{a}}
+\newcommand{\bpo}{\mathbf{b}}
+\newcommand{\mat}[1]{\mathbf{#1}}
+\renewcommand{\vec}[1]{\mathbf{#1}}
+
+\newcommand{\shakesmall}{\text{{\sf SHAKE128}}\xspace}
+\newcommand{\shakebig}{\text{{\sf SHAKE256}}\xspace}
+\newcommand{\KPKE}{\text{{\sf K-PKE}}\xspace}
+
+
+\newcommand{\FO}{\ensuremath{\mathsf{FO}}\xspace}
+\newcommand{\T}{\ensuremath{\mathsf{T}}\xspace}
+\newcommand{\U}{\ensuremath{\mathsf{U}}\xspace}
+\renewcommand{\PKE}{\ensuremath{\mathsf{PKE}}\xspace}
+\renewcommand{\PRF}{\ensuremath{\mathsf{PRF}}\xspace}
+\newcommand{\IND}{\ensuremath{\mathsf{IND}}\xspace}
+\newcommand{\KEM}{\ensuremath{\mathsf{KEM}}\xspace}
+\newcommand{\OW}{\ensuremath{\mathsf{OW}}\xspace}
+\newcommand{\OWL}{\ensuremath{\mathsf{OWL}}\xspace}
+\newcommand{\CPA}{\ensuremath{\mathsf{CPA}}\xspace}
+\newcommand{\CCA}{\ensuremath{\mathsf{CCA}}\xspace}
+\newcommand{\Adv}{\ensuremath{\mathsf{Adv}}\xspace}
+\newcommand{\PCVA}{\ensuremath{\mathsf{PCVA}}\xspace}
+\newcommand{\Decaps}{\ensuremath{\mathsf{Decaps}}\xspace}
+\newcommand{\Gen}{\ensuremath{\mathsf{Gen}}\xspace}
+\newcommand{\Enc}{\ensuremath{\mathsf{Enc}}\xspace}
+\newcommand{\Dec}{\ensuremath{\mathsf{Dec}}\xspace}
+\newcommand{\M}{\ensuremath{\mathcal{M}}\xspace}
+\newcommand{\Rand}{\ensuremath{\mathcal{R}}\xspace}
+\newcommand{\B}{\ensuremath{\mathcal{B}}\xspace}
+\newcommand{\D}{\ensuremath{\mathcal{D}}\xspace}
+\newcommand{\A}{\ensuremath{\mathcal{A}}\xspace}
+\renewcommand{\H}{\ensuremath{\mathsf{H}}\xspace}
+\newcommand{\G}{\ensuremath{\mathsf{G}}\xspace}
+\newcommand{\GH}{\ensuremath{\mathsf{GH}}\xspace}
+\newcommand{\J}{\ensuremath{\mathsf{J}}\xspace}
+\newcommand{\K}{\ensuremath{\mathcal{K}}\xspace}
+\algnewcommand\An{\textbf{and}\ }
+\algnewcommand\Or{\textbf{or}\ }
+\newcommand{\Pco}{\ensuremath{\mbox{\sc Pco}\xspace}}
+\newcommand{\Cvo}{\ensuremath{\mbox{\sc Cvo}\xspace}}
+\newcommand{\getsr}{\leftarrow \!\!\! \mbox{\tiny \$}\, }
+\renewcommand{\L}{\ensuremath{\mathcal{L}}\xspace}
+

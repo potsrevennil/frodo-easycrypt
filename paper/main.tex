@@ -2,16 +2,26 @@
 
 \usepackage[nocompress]{cite}
 \usepackage[pdftex]{graphicx}
-\usepackage{amsmath}
-\usepackage{algorithmic}
+\usepackage{amsmath,amsfonts}
+\usepackage{algpseudocodex}
+\usepackage{algorithm}
 \usepackage{array}
 \usepackage[caption=false,font=footnotesize,labelfont=sf,textfont=sf]{subfig}
 \usepackage{stfloats}
 \usepackage{url}
 \usepackage{todonotes}
 \usepackage{enumitem}
+\usepackage{xspace}
+\usepackage{cleveref}
 
 \hyphenation{for-mo-sa}
+
+% Please do not make bf again. Use subsubsection for bold
+\def\subheading#1{\medskip\noindent{\textsc{#1}}~\ignorespaces}
+
+\input{easycrypt-common}
+
+\input{macros}
 
 \begin{document}
 
