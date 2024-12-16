@@ -1,1 +1,6 @@
 .direnv
+*.aux
+*.dvi
+*.fls
+*.fdb_latexmk
+*.log
