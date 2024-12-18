@@ -25,7 +25,20 @@ require Word.
 
 clone import Word as W8 with
   type Alphabet.t <- bool,
-  op n <- 8.
+  op n <- 8
+  proof ge0_n by trivial
+  proof getE, setE.
+
+realize getE.
+proof.
+move => *.
+by rewrite /(_.[_]).
+qed.
+realize setE.
+proof.
+move => *.
+by rewrite /(_.[_<-_]).
+qed.
 
 op tobytes (xs: bool list): W8.word list = map W8.mkword (chunk W8.card xs).
 
