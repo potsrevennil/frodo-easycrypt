@@ -1,5 +1,4 @@
 require import AllCore Int Real List IntDiv.
-require DynMatrix.
 require import ZModP.
 require BitWord.
 require import Array.
@@ -7,51 +6,50 @@ require import Keccak1600_Spec.
 require import BitEncoding.
 (*---*) import BS2Int.
 (*---*) import BitChunking.
+require (*--*) FrodoPKE_correctness.
+require (*--*) Distrmatrix.
+
+clone import FrodoPKE_correctness as FrodoPKE_correctness_ with
+    op N: int = 640,
+    op Nb: int = 8,
+    op Mb: int = 8,
+    op D: int = 15,
+    op q: int = 32768,
+    op B: int = 2,
+    op lenSE: int = 128
+    proof gt0_N by trivial
+    proof gt0_Nb by trivial
+    proof gt0_Mb by trivial
+    proof D_bound by trivial
+    proof B_bound by trivial
+    proof ge0_lenSE by trivial.
+
+import FrodoPKE_correctness_.FrodoPKE_.
+import DM.
+import Dmatrix_.
+import Distrmatrix_.
+import Zq.
+
+op "_.[_<-_]" (m: matrix) (ij: int*int) (v: Zq): matrix.
 
 from Jasmin require import JWord.
 from Jasmin require import JArray.
 
-op q: int = 32768 axiomatized by qE.
-op N: int = 640 axiomatized by nE.
-op Nb: int = 8 axiomatized by nbE.
-op D: int = 15 axiomatized by dE.
-op B: int = 2 axiomatized by bE.
-op Lsec: int = 24 axiomatized by lsecE.
+op toW8 (w: FrodoPKE_correctness_.W8.sT): JWord.W8.t = JWord.W8.bits2w (FrodoPKE_correctness_.W8.val w).
 
-clone import ZModRing as Zq with
-  op p <- q
-  rename "zmod" as "Zq"
-  proof ge2_p by rewrite qE //.
-
-theory M.
-clone include DynMatrix with
-  theory ZR <- ZModpRing
-  proof *.
-
-type t = Matrices.matrix.
-op size: { int*int | 0 <= size.`1 && 0 <= size.`2 } as ge0_size.
-axiom size_eq (m: t): size m = size. 
-
-op "_.[_<-_]" (m: t) (ij: int*int) (v: R): t.
+(*
 op tolist (m: t): R list =
   let ys = range 0 (cols m) in
   let xs = range 0 (rows m) in
-  let ms = concatMap (fun x => map (fun y => (x, y)) ys) xs in
+  let ms = flatten (map (fun x => map (fun y => (x, y)) ys) xs) in
   map (fun i => m.[i] ) ms.
-
-end M.
-
-(*---*) import M.
-
-abbrev mask5f = W8.of_int 95 (* 95 = 0x5f *).
-abbrev mask96 = W8.of_int 150 (* 150 = 0x96 *).
+  *)
 
 op CDF_table: int array = mkarray [
    4643; 13363; 20579; 25843;
    29227; 31145; 32103; 32525;
    32689; 32745; 32762; 32766;
    32767
-
 ].
 
 module Sample = {
@@ -72,9 +70,9 @@ module Sample = {
     return inZq e;
   }
 
-  proc matrix(r: W16.t array, n1: int, n2: int): M.t = {
+  proc matrix(r: W16.t list, n1: int, n2: int): matrix = {
       var i, j, x;
-      var m: M.t;
+      var m: matrix;
       i <- 0;
       j <- 0;
       while (i < n1) {
@@ -91,7 +89,8 @@ module Sample = {
 }.
 
 module Encoding = {
-  proc pack(c: M.t, n1: int, n2: int): bool list = {
+(*
+  proc pack(c: matrix, n1: int, n2: int): bool list = {
     var i, j, l, cd;
     var b: bool array;
     i <- 0;
@@ -145,11 +144,12 @@ module Encoding = {
 
     return c;
   }
+  *)
 
-  proc encode(bk: bool array): M.t = {
+  proc encode(bk: bool array): matrix = {
     var i, j, l;
     var k;
-    var mk: M.t;
+    var mk: matrix;
 
     i <- 0;
     while (i < Nb) {
@@ -171,7 +171,7 @@ module Encoding = {
     return mk;
   }
 
-  proc decode(mk: M.t): bool array = {
+  proc decode(mk: matrix): bool array = {
     var i, j, l;
     var k;
     var bk: bool array;
@@ -198,21 +198,28 @@ module Encoding = {
   }
 }.
 
+
+op w128toW8l bs = map W8.bits2w (chunk W8.size (W128.w2bits bs)).
+op w8ltoW16l (bs: W8.t list) = map W16.bits2w (chunk W16.size (flatten (map W8.w2bits bs))).
+op tobytes bs = map W8.bits2w (chunk W8.size bs).
+
+op N: int = FrodoPKE_correctness_.N.
+
 module GenA = {
-  proc init(seedA: W128.t): M.t = {
+  proc init(seedA: bool list): matrix = {
     var i, j;
     var seed: W8.t list;
-    var c: W16.t array;
-    var a: M.t;
+    var c: W16.t list;
+    var a: matrix;
 
     i <- 0;
     while (i < N) {
-      seed <- tobytes (int2bs 16 i) ++ w128toW8l seedA;
-      c <- mkarray (w8ltoW16l (SHAKE128 seed (2*N)));
+      seed <- tobytes (int2bs 16 i ++ seedA);
+      c <- w8ltoW16l (SHAKE128 seed (2*N));
 
       j <- 0;
       while (j < N) {
-        a.[(i,j)] <- inZq (W16.to_uint c.[j]);
+        a.[(i,j)] <- inZq (W16.to_uint (nth witness c j));
         j <- j+1;
       }
 
@@ -223,88 +230,64 @@ module GenA = {
   }
 }.
 
-clone export PolyArray as ArrayPNNb  with op size <- D*N*Nb%/8.
-clone export PolyArray as ArrayPNbN  with op size <- D*Nb*N%/8.
-clone export PolyArray as ArrayPNbNb  with op size <- D*Nb*Nb%/8.
-print ArrayPNNb.
+type pkey = matrix * matrix. 
+type skey = matrix.
 
-theory PKE.
-type seedA = W128.t.
-(* (n,nb) *)
-type B = M.t.
+type ciphertext = matrix * matrix. 
+type plaintext = bool list.
 
-type pkey = W128.t * W8.t ArrayPNNb.t.
-(* (nb,n) *)
-type skey = M.t.
-
-type ciphertext = W8.t ArrayPNbN.t * W8.t ArrayPNbNb.t.
-type plaintext = W128.t.
-
-
+(* A prf-based concrete frodo pke spec: replace the input seedA by matrix A, output of GenA(seedA) *)
 module PKE = {
-  proc kg_derand(coins: W128.t * W256.t) : pkey * skey = {
-    var ma, mb, me, mst: M.t; (* a: (n, n), b, e: (n, nb), st: (nb, n) *)
-    var seedA: W128.t;
-    var seedSE: W256.t;
+  proc kg_derand(coins: matrix * bool list) : pkey * skey = {
+    var ma, mb, me, mst: matrix; (* a: (n, n), b, e: (n, nb), st: (nb, n) *)
+    var seedSE: bool list;
     var r: W16.t list;
     var b: bool list;
 
-    seedA <- coins.`1;
+    ma <- coins.`1;
     seedSE <- coins.`2;
 
-    ma <@ GenA.init(seedA);
-
-    r <- w8ltoW16l (SHAKE128 (mask5f :: w256toW8l seedSE) (4*N*Nb));
-    mst <@ Sample.matrix(mkarray (take (N*Nb) r), Nb, N);
-    me <@ Sample.matrix(mkarray (drop (N*Nb) r), N, Nb);
+    r <- w8ltoW16l (SHAKE128 ((toW8 mask5f) :: tobytes seedSE) (4*N*Nb));
+    mst <@ Sample.matrix(take (N*Nb) r, Nb, N);
+    me <@ Sample.matrix(drop (N*Nb) r, N, Nb);
 
     mb <- ma * (trmx mst) + me;
-    b <@ Encoding.pack(mb, N, Nb);
 
-    return ((seedA, ArrayPNNb.of_list witness (tobytes b)), mst);
+    return ((ma, mb), mst);
   }
 
-  proc enc_derand(pt: plaintext, pk: pkey, coins: W256.t): ciphertext = {
-    var ma, mb, ms', me', me'', mb', mu, mv, mc: M.t;
-    var c1, c2;
-    var seedA, b;
+  proc enc_derand(pt: plaintext, pk: pkey, coins: bool list): ciphertext = {
+    var ma, mb, ms', me', me'', mb', mu, mv, mc: matrix;
     var r: W16.t list;
 
-    (seedA, b) <- pk;
-    ma <@ GenA.init(seedA);
-    mb <@ Encoding.unpack(concatMap W8.w2bits (ArrayPNNb.to_list b), N, Nb);
+    (ma, mb) <- pk;
 
-    r <- w8ltoW16l (SHAKE128 (mask96 :: w256toW8l coins) (4*N*Nb + 2*Nb*Nb));
-    ms' <@ Sample.matrix(mkarray (take (N*Nb) r), Nb, N);
-    me' <@ Sample.matrix(mkarray (take (N*Nb) (drop (N*Nb) r)), Nb, N);
-    me'' <@ Sample.matrix(mkarray (drop (2*N*Nb) r), Nb, Nb);
+    r <- w8ltoW16l (SHAKE128 (toW8 mask96 :: tobytes coins) (4*N*Nb + 2*Nb*Nb));
+    ms' <@ Sample.matrix(take (N*Nb) r, Nb, N);
+    me' <@ Sample.matrix(take (N*Nb) (drop (N*Nb) r), Nb, N);
+    me'' <@ Sample.matrix(drop (2*N*Nb) r, Nb, Nb);
 
     mb' <- ms' * ma + me';
-    c1 <@ Encoding.pack(mb', Nb, N);
 
-    mu <@ Encoding.encode(mkarray (W128.w2bits pt));
+    mu <@ Encoding.encode(mkarray pt);
     mv <- ms' * mb + me'';
     mc <- mv + mu;
-    c2 <@ Encoding.pack(mc, Nb, Nb);
 
-    return (ArrayPNbN.of_list witness (tobytes c1), ArrayPNbNb.of_list witness (tobytes c2));
+    return (mb', mc);
   }
 
   proc dec(ct: ciphertext, sk: skey): plaintext = {
     var c1, c2;
-    var mb', mc, m: M.t; (* c1: (nb, n), c2: (nb, nb) *)
+    var mb', mc, m: matrix; (* c1: (nb, n), c2: (nb, nb) *)
     var u;
 
     (c1, c2) <- ct;
-    mb' <@ Encoding.unpack(concatMap W8.w2bits (ArrayPNbN.to_list c1), Nb, N);
-    mc <@ Encoding.unpack(concatMap W8.w2bits (ArrayPNbNb.to_list c2), Nb, Nb);
-    m <- mc - mb' * (trmx sk);
+    m <- c2 - c1 * (trmx sk);
 
     u <@ Encoding.decode(m);
 
-    return W128.bits2w (ofarray u);
+    return ofarray u;
   }
 }.
 end PKE.
 
-print PKE.
