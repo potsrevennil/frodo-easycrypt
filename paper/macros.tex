@@ -9,13 +9,18 @@
 \newcommand{\mlkem}{\text{{ML-KEM}}\xspace}
 \newcommand{\fips}{\text{{\sc FIPS 203 (Draft)}}\xspace}
 \newcommand{\kpke}{\text{{\sc K-PKE}}\xspace}
-\newcommand{\frodo}{\text{{FRODO}}\xspace}
 \newcommand{\frodopke}{\textsc{FRODOPKE}\xspace}
-\newcommand{\frodokem}{\textsc{FRODO KEM}\xspace}
+\newcommand{\frodokem}{\textsc{FRODOKEM}\xspace}
 
 \newcommand{\mlkemlow}{\mlkem-512\xspace}
 \newcommand{\mlkemmid}{\mlkem-768\xspace}
 \newcommand{\mlkemhigh}{\mlkem-1024\xspace}
+\newcommand{\frodolow}{\frodokem-640\xspace}
+\newcommand{\frodomid}{\frodokem-976\xspace}
+\newcommand{\frodohigh}{\frodokem-1344\xspace}
+\newcommand{\chifrodolow}{$\chi_{Frodo-640}$\xspace}
+\newcommand{\chifrodomid}{$\chi_{Frodo-976}$\xspace}
+\newcommand{\chifrodohigh}{$\chi_{Frodo-1344}$\xspace}
 
 \newcommand{\kyber}{\text{{\sc Kyber}}\xspace}
 \newcommand{\kyberfull}{\text{{\sc CRYSTALS-Kyber}}\xspace}
@@ -99,6 +104,7 @@
 \newcommand{\fpo}{\mathbf{f}}
 \newcommand{\apo}{\mathbf{a}}
 \newcommand{\bpo}{\mathbf{b}}
+\newcommand{\qpo}{\mathbf{b}}
 \newcommand{\mat}[1]{\mathbf{#1}}
 \renewcommand{\vec}[1]{\mathbf{#1}}
 
@@ -109,6 +115,7 @@
 \newcommand{\shake}{\text{{\sf SHAKE}}\xspace}
 \newcommand{\shakesmall}{\text{{\sf SHAKE128}}\xspace}
 \newcommand{\shakebig}{\text{{\sf SHAKE256}}\xspace}
+\newcommand{\aessmall}{\text{{\sf AES128}}\xspace}
 \newcommand{\KPKE}{\text{{\sf K-PKE}}\xspace}
 
 
@@ -146,3 +153,4 @@
 \newcommand{\Cvo}{\ensuremath{\mbox{\sc Cvo}\xspace}}
 \newcommand{\getsr}{\leftarrow \!\!\! \mbox{\tiny \$}\, }
 \renewcommand{\L}{\ensuremath{\mathcal{L}}\xspace}
+\newcommand{\round}[1]{\ensuremath{\lfloor#1\rceil}}
