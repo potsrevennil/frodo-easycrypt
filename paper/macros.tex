@@ -4,10 +4,14 @@
 \newcommand{\Fq}{\ensuremath{\mathbb{F}_q}\xspace}
 \newcommand{\Rq}{\ensuremath{\mathcal{R}_q}\xspace}
 \newcommand{\R}{\ensuremath{\mathcal{R}}\xspace}
+\newcommand{\uni}[1]{\ensuremath{\{0, 1\}^{#1}}}
 
 \newcommand{\mlkem}{\text{{ML-KEM}}\xspace}
 \newcommand{\fips}{\text{{\sc FIPS 203 (Draft)}}\xspace}
 \newcommand{\kpke}{\text{{\sc K-PKE}}\xspace}
+\newcommand{\frodo}{\text{{FRODO}}\xspace}
+\newcommand{\frodopke}{\textsc{FRODOPKE}\xspace}
+\newcommand{\frodokem}{\textsc{FRODO KEM}\xspace}
 
 \newcommand{\mlkemlow}{\mlkem-512\xspace}
 \newcommand{\mlkemmid}{\mlkem-768\xspace}
@@ -29,6 +33,11 @@
 \newcommand{\KEMGen}{\ensuremath{\mathsf{KeyGen}}}
 \newcommand{\KEMEnc}{\ensuremath{\mathsf{Encap}}}
 \newcommand{\KEMDec}{\ensuremath{\mathsf{Decap}}}
+
+\newcommand{\GenA}{\ensuremath{\mathsf{Gen}}}
+\newcommand{\SampleMatrix}{\ensuremath{\mathsf{SampleMatrix}}}
+\newcommand{\Encode}{\ensuremath{\mathsf{Encode}}}
+\newcommand{\Decode}{\ensuremath{\mathsf{Decode}}}
 
 \newcommand{\pk}{\mathit{pk}}
 \newcommand{\sk}{\mathit{sk}}
@@ -69,6 +78,12 @@
 \newcommand{\KyberDecompress}{\ensuremath{\mathsf{Decompress}_q}\xspace}
 
 \newcommand{\Apo}{\mathbf{A}}
+\newcommand{\Bpo}{\mathbf{B}}
+\newcommand{\Cpo}{\mathbf{C}}
+\newcommand{\Epo}{\mathbf{E}}
+\newcommand{\Mpo}{\mathbf{M}}
+\newcommand{\Spo}{\mathbf{S}}
+\newcommand{\Vpo}{\mathbf{V}}
 \newcommand{\xpo}{\mathbf{x}}
 \newcommand{\ypo}{\mathbf{y}}
 \newcommand{\cpo}{\mathbf{c}}
@@ -87,6 +102,11 @@
 \newcommand{\mat}[1]{\mathbf{#1}}
 \renewcommand{\vec}[1]{\mathbf{#1}}
 
+\newcommand{\seedA}{\mathsf{seed}_\Apo}
+\newcommand{\seedSE}{\mathsf{seed}_\mathbf{SE}}
+\newcommand{\rbits}[2]{(\rpo^{(#1)}, ..., \rpo^{(#2)})}
+
+\newcommand{\shake}{\text{{\sf SHAKE}}\xspace}
 \newcommand{\shakesmall}{\text{{\sf SHAKE128}}\xspace}
 \newcommand{\shakebig}{\text{{\sf SHAKE256}}\xspace}
 \newcommand{\KPKE}{\text{{\sf K-PKE}}\xspace}
@@ -114,6 +134,7 @@
 \newcommand{\B}{\ensuremath{\mathcal{B}}\xspace}
 \newcommand{\D}{\ensuremath{\mathcal{D}}\xspace}
 \newcommand{\A}{\ensuremath{\mathcal{A}}\xspace}
+\newcommand{\C}{\ensuremath{\mathcal{C}}\xspace}
 \renewcommand{\H}{\ensuremath{\mathsf{H}}\xspace}
 \newcommand{\G}{\ensuremath{\mathsf{G}}\xspace}
 \newcommand{\GH}{\ensuremath{\mathsf{GH}}\xspace}
@@ -125,4 +146,3 @@
 \newcommand{\Cvo}{\ensuremath{\mbox{\sc Cvo}\xspace}}
 \newcommand{\getsr}{\leftarrow \!\!\! \mbox{\tiny \$}\, }
 \renewcommand{\L}{\ensuremath{\mathcal{L}}\xspace}
-
